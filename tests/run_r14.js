@@ -85,11 +85,12 @@ function findSettingEl(containerEl, name) {
     ok(!!statusBox && statusBox.classList.contains("callout")
       && statusBox.getAttribute("data-callout") === "info",
       "A3：状态横幅是 info callout（不再裸文本）");
-    ok(!!statusBox.querySelector(".kbt-status-main") && !!statusBox.querySelector(".kbt-status-sub"),
-      "A4：横幅分主行（粗体）/ 副行（细节+引导）两层");
+    ok(!!statusBox.querySelector(".kbt-status-main") && !!statusBox.querySelector(".kbt-led")
+      && !statusBox.querySelector(".kbt-status-sub"),
+      "A4（R20 需求1）：横幅只剩「圆点 + 是否启用」一行，小字副行整条去掉");
     await sleep(30);
     const mainTxt = statusBox.querySelector(".kbt-status-main").textContent || "";
-    ok(mainTxt.indexOf("当前状态") === 0, "A5：主行自动读取状态");
+    ok(/^(已启用|未启用)$/.test(mainTxt), "A5：主行只报是否启用（实到「" + mainTxt + "」）");
     eq((tab.containerEl.textContent || "").indexOf("**"), -1,
       "A6：设置页全文不再出现 Markdown 星号（R13 的 `**再次执行**` 硬伤）");
 
@@ -108,9 +109,9 @@ function findSettingEl(containerEl, name) {
     const cb = fs.readFileSync(path.join(PLUG, "vendor", "creation-board.js"), "utf8");
     eq((cb.match(/cb-edit-sep/g) || []).length >= 2, true,
       "B2：板块编辑表单有分段小标题（基础 / 显示 两处）");
-    ok(cb.indexOf('createEl("details", { cls: "cb-io cb-panel-adv" })') >= 0
-      && cb.indexOf("高级：配置搬运") >= 0,
-      "B3：配置搬运（裸 JSON）收进默认折叠的高级组");
+    ok(/createEl\("details", \{ cls: "cb-io" \}\)/.test(cb)
+      && cb.indexOf("配置搬运（复制 / 导入）") >= 0,
+      "B3（R20 需求4-②）：配置搬运（裸 JSON）折进「高级」组里（默认折叠，不占台面）");
   }
 
   /* ================= C. 样式源级 ================= */

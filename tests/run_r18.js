@@ -124,7 +124,7 @@ function rowNames(card) {
   /* ---------- ④ 栏目 = 小标签 + 卡片 ---------- */
   {
     const secs = [...tab.containerEl.querySelectorAll(".kbt-sec")];
-    eq(secs.length, 12, "④ -1：12 个栏目（R19 起三页各 4 栏 —— 多出「当前状态」栏）");
+    eq(secs.length, 9, "④ -1：9 个栏目（R20 需求2 起页内「帮助」栏撤掉 → 三页各 3 栏）");
     eq(secs.filter(s => s.classList.contains("kbt-status-card")).length, 3,
       "④ -1b：三页各有一个「当前状态」栏（R19 需求3：状态独立成栏）");
     ok(secs.every(s => s.querySelector(":scope > .kbt-lb") && s.querySelector(":scope > .kbt-card")),
@@ -157,33 +157,36 @@ function rowNames(card) {
       "⑤ -5：③ 的高级里点明「卡片宽度 / 空位铺满整行」在哪调（视图级选项，不放全局开关）");
   }
 
-  /* ---------- ⑥ 帮助栏（一栏 + 悬浮小窗） ---------- */
+  /* ---------- ⑥ 帮助（R20 需求2：入口在顶部标签行，点开仍是悬浮小窗） ---------- */
   {
     const helpCards = [...tab.containerEl.querySelectorAll(".kbt-sec")].filter(s => {
       const lb = s.querySelector(".kbt-lb");
       return lb && lb.textContent === "帮助";
     });
-    eq(helpCards.length, 3, "⑥ -1：每页底部一栏「帮助」");
-    ok(rowNames(helpCards[0].querySelector(".kbt-card")).join(",") === "本页提示",
-      "⑥ -2：帮助栏只有一行入口");
-    const pop = tab._pops.rebuild;
+    eq(helpCards.length, 0, "⑥ -1：页内不再有「帮助」栏（R20 需求2 整栏撤掉）");
+    const ghs = tab.containerEl.querySelector(".kbt-tabs .kbt-ghost-btns");
+    const btns = [...ghs.querySelectorAll(".kbt-ghost-btn")];
+    eq(btns.map(b => b.textContent).join(","), "日志,关于,帮助",
+      "⑥ -2：标签行右端 = 日志 / 关于 / 帮助（帮助在「关于」右边）");
+    const btn = btns.find(b => b.textContent === "帮助");
+    tab._activateTab("rebuild");
+    const pop = tab._pops["rebuild:help"];
     ok(!!pop && pop.hasAttribute("hidden"), "⑥ -3：点开前小窗是收起的");
+    btn.click();
+    ok(!pop.hasAttribute("hidden"), "⑥ -4：点「帮助」→ 当前页小窗打开");
     const rows = [...pop.querySelectorAll(".kbt-help-item")];
-    ok(rows.length === KB.modules.HELP.rebuild.length,
-      "⑥ -4：小窗条目数 = 该页帮助条数（" + rows.length + "）");
+    eq(rows.length, KB.modules.HELP.rebuild.length,
+      "⑥ -5：小窗条目数 = 该页帮助条数（" + rows.length + "）");
     ok(rows.every(r => r.classList.contains("kbt-hrow") && r.querySelector(".kbt-hk") && r.querySelector(".kbt-hv")),
-      "⑥ -5：条目结构 = 键 + 说明（效果图 .hrow）");
+      "⑥ -6：条目结构 = 键 + 说明（效果图 .hrow）");
     const keys = rows.map(r => r.querySelector(".kbt-hk").textContent);
     ok(keys.indexOf("预览报告") >= 0 && keys.indexOf("执行") >= 0 && keys.indexOf("回滚") >= 0,
-      "⑥ -6：键名与页内操作对得上（" + keys.join(" / ") + "）");
+      "⑥ -7：键名与页内操作对得上（" + keys.join(" / ") + "）");
     ok((pop.textContent || "").indexOf("元数据目录") >= 0,
-      "⑥ -7：路径说明是动态拼的（不写死顶层目录名）");
-    /* 点开 → 小窗仍可用（交互保持：boss 明确说「帮助栏点开后还是悬浮小窗」） */
-    const btn = [...helpCards[0].querySelectorAll("button")].find(b => b.textContent === "查看提示");
-    btn.click();
-    ok(!pop.hasAttribute("hidden") && !!pop.querySelector(".kbt-pop-body"), "⑥ -8：点开 → 悬浮小窗（交互不变）");
+      "⑥ -8：路径说明是动态拼的（不写死顶层目录名）");
+    ok(!!pop.querySelector(".kbt-pop-body"), "⑥ -9：点开 → 悬浮小窗（交互不变）");
     pop.querySelector(".kbt-pop-x").click();
-    ok(pop.hasAttribute("hidden"), "⑥ -9：可关闭");
+    ok(pop.hasAttribute("hidden"), "⑥ -10：可关闭");
   }
 
   /* ---------- ⑦ 样式照 v3（零裸色） ---------- */
@@ -205,7 +208,7 @@ function rowNames(card) {
     ok(/\.kbt-lb\s*{[^}]*color:\s*var\(--text-faint\)/.test(css), "⑦ -7：小标签是弱化色");
     ok(/\.kbt-hrow\s*{[^}]*display:\s*flex/.test(css) && /\.kbt-hk\s*{\s*flex:\s*none/.test(css),
       "⑦ -8：帮助条目横排、键不换行");
-    ok(/\.kbt-ghost-btns\s*{[^}]*margin-left:\s*auto/.test(css), "⑦ -9：两个入口靠右");
+    ok(/\.kbt-ghost-btns\s*{[^}]*margin-left:\s*auto/.test(css), "⑦ -9：三个入口靠右");
     /* R19 需求4：栏内按钮统一素色 → 不再有 cta 淡紫底；但「零裸色」这条底线不能松 */
     ok(/\.kbt-card button:not\(\.kbt-inline-btn\)[^{]*\{[^}]*background:\s*var\(--background-primary\)/.test(css),
       "⑦ -10：R19 按钮统一素色（底色走 --background-primary，零裸色不变）");

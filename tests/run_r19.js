@@ -201,9 +201,10 @@ const hasKey = (f, k) => !!(f.fm && Object.prototype.hasOwnProperty.call(f.fm, k
     /* rebuild 页的状态条目是异步算的（await rebuild.detectState）→ 等它落地再断言 */
     await sleep(150);
 
-    ok(/function statusLine\(box, mainText, tip\)/.test(src75) &&
-      /cls: "kbt-sec kbt-status-card"/.test(src75),
-      "③ -1：状态行由 statusLine 建成独立一栏（.kbt-sec.kbt-status-card）");
+    ok(/function statusLine\(box, tip\)/.test(src75) &&
+      /cls: "kbt-sec kbt-status-card"/.test(src75) &&
+      /var led = top\.createEl\("span", \{ cls: "kbt-led" \}\)/.test(src75),
+      "③ -1：状态行由 statusLine 建成独立一栏（R20 需求1 起：圆点 + 是否启用，签名 (box, tip)）");
     eq([...tab.containerEl.querySelectorAll(".kbt-sec.kbt-status-card")].length, 3,
       "③ -2：三页各一栏「当前状态」");
     eq([...tab.containerEl.querySelectorAll(".kbt-sec.kbt-status-card > .kbt-lb")]

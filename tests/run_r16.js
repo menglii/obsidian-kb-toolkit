@@ -77,10 +77,11 @@ function findSettingEl(containerEl, name) {
     ok(!!verEl && /^v\d/.test(verEl.textContent || ""),
       "A2：页头右上角是版本号（" + (verEl && verEl.textContent) + "）");
     const ghostWrap = tab.containerEl.querySelector(".kbt-tabs .kbt-ghost-btns");
-    ok(!!ghostWrap, "A3：日志 / 关于 挂在标签行里（效果图 .tbs > .ghs）");
+    ok(!!ghostWrap, "A3：日志 / 关于 / 帮助 挂在标签行里（效果图 .tbs > .ghs）");
     const headBtns = ghostWrap ? [...ghostWrap.querySelectorAll(".kbt-ghost-btn")] : [];
-    eq(headBtns.length, 2, "A4：日志 / 关于 两个入口");
-    eq(headBtns.map(b => b.textContent).join(","), "日志,关于", "A5：顺序 = 日志 → 关于（靠右）");
+    eq(headBtns.length, 3, "A4（R20 需求2）：日志 / 关于 / 帮助 三个入口");
+    eq(headBtns.map(b => b.textContent).join(","), "日志,关于,帮助",
+      "A5：顺序 = 日志 → 关于 → 帮助（都在右端，帮助在「关于」右边）");
 
     /* ---- B. 三标签 ---- */
     const tabs = [...tab.containerEl.querySelectorAll(".kbt-tab")];
@@ -118,12 +119,13 @@ function findSettingEl(containerEl, name) {
     ok([...infos].every(b => (b.getAttribute("data-tip") || "").length > 0),
       "C5：每个 ⓘ 都带提示文案（悬停可见）");
     const st = tab._sectionBoxes.rebuild.querySelector(".kbt-status");
-    ok(!!st && !!st.querySelector(".kbt-status-main") && !!st.querySelector(".kbt-status-sub"),
-      "C6：短横下面是状态行（主行 + 副行）");
+    ok(!!st && !!st.querySelector(".kbt-status-main") && !!st.querySelector(".kbt-led")
+      && !st.querySelector(".kbt-status-sub"),
+      "C6（R20 需求1）：短横下面是「圆点 + 是否启用」一行，小字副行已去掉");
     ok(!!st.querySelector(".kbt-status-top .kbt-info"),
       "C6b：ⓘ 与状态文字同一行（效果图 .mstat）");
     await sleep(30);
-    ok((st.querySelector(".kbt-status-main").textContent || "").indexOf("当前状态") === 0,
+    ok(/^(已启用|未启用)$/.test(st.querySelector(".kbt-status-main").textContent || ""),
       "C7：状态自动读取（不用按钮触发）");
 
     /* ---- D. 栏目卡片 ---- */
@@ -136,30 +138,38 @@ function findSettingEl(containerEl, name) {
       "D3：笔记页分「自动补全 / 批量操作」");
     ok(labels.indexOf("内嵌视图") >= 0 && labels.indexOf("看板范围") >= 0,
       "D4：Base 页有「内嵌视图」与「看板范围」");
-    ok(labels.indexOf("帮助") >= 0, "D5：每页底部一栏「帮助」");
+    ok(labels.indexOf("帮助") === -1, "D5（R20 需求2）：页内不再有「帮助」栏（入口挪到顶部标签行）");
 
-    /* ---- E. 帮助（一栏入口 + 悬浮小窗） ---- */
-    const helpRows = [...tab.containerEl.querySelectorAll(".kbt-help-row")];
-    eq(helpRows.length, 3, "E1：每页底部各一栏「帮助」");
-    const popR = tab._pops.rebuild;
-    ok(!!popR && popR.hasAttribute("hidden"), "E2：帮助小窗默认收起");
+    /* ---- E. 帮助（R20 需求2：入口在顶部标签行 → 点开还是那套悬浮小窗） ---- */
+    eq([...tab.containerEl.querySelectorAll(".kbt-help-row")].length, 0,
+      "E1：页内「帮助」栏整栏撤掉（不再每页一栏）");
+    const helpBtn = headBtns.find(b => b.textContent === "帮助");
+    ok(!!helpBtn, "E2：顶部标签行有「帮助」按钮（「日志 / 关于」右边）");
+    const popR = tab._pops["rebuild:help"];
+    ok(!!popR && popR.hasAttribute("hidden"), "E3：帮助小窗默认收起");
     const items = popR.querySelectorAll(".kbt-help-item");
     const seps = popR.querySelectorAll(".kbt-help-sep");
-    ok(items.length >= 3, "E3：小窗里有多条提示");
-    eq(seps.length, items.length - 1, "E4：条目之间只用分隔线（条数 = 分隔线 + 1，不分栏）");
+    ok(items.length >= 3, "E4：小窗里有多条提示（" + items.length + " 条）");
+    eq(seps.length, items.length - 1, "E5：条目之间只用分隔线（条数 = 分隔线 + 1，不分栏）");
     ok([...items].every(it => it.querySelector(".kbt-hk") && it.querySelector(".kbt-hv")),
-      "E4b：R18 起条目是「键 + 说明」一行一条（效果图 .hrow）");
-    ok(!popR.querySelector(".kbt-pop-body [class*=col]"), "E5：正文里没有多列容器（单栏）");
-    const helpBtn = [...helpRows[0].querySelectorAll("button")].find(b => b.textContent === "查看提示");
-    ok(!!helpBtn, "E6：帮助栏有「查看提示」按钮");
+      "E5b：条目是「键 + 说明」一行一条（效果图 .hrow）");
+    ok(!popR.querySelector(".kbt-pop-body [class*=col]"), "E6：正文里没有多列容器（单栏）");
+    tab._activateTab("rebuild");
     helpBtn.click();
-    ok(!popR.hasAttribute("hidden"), "E7：点开 → 悬浮小窗显示");
+    ok(!popR.hasAttribute("hidden"), "E7：点顶部「帮助」→ 当前页的悬浮小窗显示");
     ok(!!popR.querySelector(".kbt-pop-mask") && !!popR.querySelector(".kbt-pop-x") && !!popR.querySelector(".kbt-pop-body"),
       "E8：小窗 = 遮罩 + 关闭钮 + 可滚动正文");
     ok((popR.textContent || "").indexOf("坚果云已同步完成") >= 0,
       "E9：安全门槛文案收进帮助（页面清爽但说明没丢）");
     popR.querySelector(".kbt-pop-x").click();
     ok(popR.hasAttribute("hidden"), "E10：点 × → 关闭");
+    /* 键按**当前**标签页拼 → 换一页点同一个按钮，开的是那一页的窗 */
+    tab._activateTab("base");
+    helpBtn.click();
+    ok(!tab._pops["base:help"].hasAttribute("hidden") && popR.hasAttribute("hidden"),
+      "E10b：切到 Base 页后点「帮助」→ 开的是该页小窗，且与前页互斥");
+    tab._closePop("base:help");
+    tab._activateTab("rebuild");
     tab._openPop("about");
     ok(!tab._pops.about.hasAttribute("hidden") && popR.hasAttribute("hidden"),
       "E11：「关于」走同一套小窗，且打开时互斥（只留一个）");
@@ -194,7 +204,7 @@ function findSettingEl(containerEl, name) {
     ok(/\.kbt-tabs\s*{[^}]*overflow-x:\s*auto/.test(kbt) && /\.kbt-tab\s*{[^}]*white-space:\s*nowrap/.test(kbt),
       "F5：窄屏标签可横向滑动、不被压折行");
     ok(/@media \(hover: none\)[\s\S]*?\.kbt-info::after[\s\S]*?display:\s*none/.test(kbt),
-      "F6：触屏不叠 tooltip（改成点 ⓘ 或看帮助栏）");
+      "F6：触屏不叠 tooltip（改成点 ⓘ，或点顶部「帮助」）");
     ok(/\.is-mobile \.kbt-pop-win\s*{[^}]*96vw/.test(kbt), "F7：手机端小窗铺满可用宽度");
 
     eq((kbt.match(/#[0-9a-fA-F]{3,8}\b/g) || []).length, 0, "G1：kbt.css 零裸 hex（铁律 6）");

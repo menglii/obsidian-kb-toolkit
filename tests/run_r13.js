@@ -138,8 +138,8 @@ function cardByLabel(containerEl, label) {
     const statusEl = box.querySelector(".kbt-status");
     ok(!!statusEl, "C1：状态横幅存在");
     await sleep(30);
-    ok((statusEl.textContent || "").indexOf("当前状态") === 0,
-      "C2：状态自动读取（不再需要「查看状态」按钮）");
+    ok(/^(已启用|未启用)/.test(statusEl.textContent || "") && !!statusEl.querySelector(".kbt-led"),
+      "C2（R20 需求1）：状态行只报「是否启用」+ 一颗状态圆点（小字副行去掉）");
     ok(findSettingEl(tab.containerEl, "查看当前状态") === null,
       "C3：「查看当前状态」独立行已并入横幅（重复入口移除）");
 
@@ -163,8 +163,8 @@ function cardByLabel(containerEl, label) {
       "D7：操作日志行有名字（效果图 辅助栏第二行）");
     ok(findSettingEl(tab.containerEl, "打开最近一次操作日志") === null,
       "D8：原「打开报告」独立行移除（重复入口收敛）");
-    ok((box.textContent || "").indexOf("坚果云已同步完成") >= 0,
-      "D9：流程说明保留「坚果云已同步」确认门槛提示（安全文案不因翻新丢失）");
+    ok((tab._pops["rebuild:help"].textContent || "").indexOf("坚果云已同步完成") >= 0,
+      "D9（R20 需求2）：确认门槛提示仍在 —— 页内小字挪进顶部「帮助」小窗（安全文案没丢）");
     await plugin.onunload();
   }
 
@@ -198,8 +198,8 @@ function cardByLabel(containerEl, label) {
       "F2：向导按效果图收进「辅助」栏（与核心操作同处一屏）");
     const kbtCss = fs.readFileSync(path.join(PLUG, "styles_src", "kbt.css"), "utf8");
     ok(/\.kb-module-disabled \.kbt-sec\.is-aux\s*{[^}]*pointer-events:\s*auto/.test(kbtCss)
-      && /\.kb-module-disabled \.kbt-help-row\s*{[^}]*pointer-events:\s*auto/.test(kbtCss),
-      "F2b：置灰段落里「辅助」栏与「帮助」栏仍可点（CSS 有据，新手不会被困住）");
+      && kbtCss.indexOf(".kbt-help-row") < 0,
+      "F2b：置灰段落里「辅助」栏仍可点；R20 起页内「帮助」栏整栏撤掉（入口在标签行，永远可点）");
     ok((tab.containerEl.textContent || "").split("模块已关闭").length === 4,
       "F3：三组各一句「已关闭」（R11 不收起机制原样）");
     await plugin.onunload();
@@ -209,8 +209,9 @@ function cardByLabel(containerEl, label) {
   {
     const cb = fs.readFileSync(path.join(PLUG, "vendor", "creation-board.js"), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "");
-    ok(cb.indexOf("cb-panel-adv") >= 0 && cb.indexOf("高级：正文细节与拖动行为") >= 0,
-      "G1：视图设置面板有「高级」折叠组（YAML/双链/拖动搬文件收进去）");
+    ok(cb.indexOf("cb-panel-adv") >= 0 && /advRow\.createEl\("summary", \{ text: "高级" \}\)/.test(cb)
+      && cb.indexOf("addGroup") >= 0,
+      "G1（R20 需求4-②）：面板改三段式（看板行为/板块/高级），高级组 summary 只留「高级」两字");
     ok(/const advBody = advRow\.createDiv\(\{ cls: "cb-opt-row" \}\);/.test(cb)
       && /addToggle\(advBody, K_YAML/.test(cb) && /addToggle\(advBody, K_MOVE/.test(cb),
       "G2：三个进阶开关挂进高级组（键与默认值不变）");

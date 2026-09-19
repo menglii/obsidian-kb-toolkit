@@ -525,6 +525,39 @@ const SOURCE_ALIAS = {
 const SOURCE_LABEL = { folder: "文件夹", tag: "标签", formula: "公式", catchall: "收容所", all: "全部", unsupported: "未支持" };
 const ADDABLE = ["folder", "tag", "formula", "catchall"];
 
+/* R20 需求3（老板截图3）：看板上那两处齿轮原来是 emoji「⚙」—— 颜色/字形/大小全由
+ * 系统字体决定（截图里是淡紫色，跟界面不搭，还随平台变）。改成**自绘的线描齿轮**：
+ * stroke = currentColor → 跟着按钮文字色走（浅色主题下就是极简黑），14px 固定尺寸。
+ * 用 createElementNS 建 SVG（不是 createEl，原生不支持 svg 命名空间），jsdom 也能跑。 */
+function gearIcon(parent) {
+  const NS = "http://www.w3.org/2000/svg";
+  const doc = (parent && parent.ownerDocument)
+    || (typeof document !== "undefined" ? document : null);
+  if (!doc || !doc.createElementNS) return null;
+  const svg = doc.createElementNS(NS, "svg");
+  svg.setAttribute("class", "cb-gear-icon");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.7");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("aria-hidden", "true");
+  const ring = doc.createElementNS(NS, "circle");
+  ring.setAttribute("cx", "12");
+  ring.setAttribute("cy", "12");
+  ring.setAttribute("r", "4.1");
+  svg.appendChild(ring);
+  const teeth = doc.createElementNS(NS, "path");
+  teeth.setAttribute("d",
+    "M12 2.9V5.1M12 18.9v2.2M2.9 12h2.2M18.9 12h2.2" +
+    "M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6");
+  svg.appendChild(teeth);
+  parent.appendChild(svg);
+  return svg;
+}
+
 /* 板块项的已知键（写回只写这些 + 各类型专属键，其余原样保留 → 不破坏手写的未来字段） */
 const KNOWN_KEYS = ["名称", "name", "数据源", "source", "路径", "path", "标签", "tag",
   "公式", "formula", "上限", "limit", "递归深度", "depth",
@@ -671,7 +704,9 @@ class CreationBoardView extends BasesViewBase {
       this.cfgSet(K_RO, !this.optBool(K_RO, false));
       this.repaint(false);
     });
-    this.gearBtn = bar.createEl("button", { cls: "cb-gear", text: "⚙ 板块" });
+    this.gearBtn = bar.createEl("button", { cls: "cb-gear" });
+    gearIcon(this.gearBtn);
+    this.gearBtn.createSpan({ cls: "cb-gear-text", text: "板块" });
     this.gearBtn.addEventListener("click", () => {
       this.panelOpen = !this.panelOpen;
       this.editIdx = -1;
@@ -1549,7 +1584,8 @@ class CreationBoardView extends BasesViewBase {
     /* R12（boss 第 2 条）：每个板块标题旁的 ⚙ —— 就地打开板块设置面板并定位到这块的编辑行
        （名称 / 数据源 / 显正文 / 属性 / 显示 YAML / 显示结尾双链 / 排序都在里面） */
     if (sec.spec && typeof sec.srcIndex === "number" && !sec.native && !sec.isFormulaValue) {
-      const gear = head.createEl("button", { cls: "cb-sec-gear", text: "⚙" });
+      const gear = head.createEl("button", { cls: "cb-sec-gear" });
+      gearIcon(gear);
       gear.setAttr("title", "板块设置：名称 / 数据源 / 显示方式（显正文、属性、显示 YAML、结尾双链、排序）");
       gear.addEventListener("click", (evt) => {
         evt.stopPropagation();
@@ -3421,39 +3457,38 @@ class CreationBoardView extends BasesViewBase {
     this.panelMsgEl.setText(this.saveState || "");
     this.panelMsgEl.toggleClass("is-err", /失败|不能|冲突/.test(this.saveState || ""));
 
-    const optRow = this.panelBodyEl.createDiv({ cls: "cb-opt-row" });
-    this.addToggle(optRow, K_DUP, true, "允许重复（一条笔记可进多个板块）");
+    /* R20 需求4-②（boss：重新设计、大幅简化、改成开关样式、无冗余文字说明）：
+     * 面板只分三段 —— 「看板行为 / 板块 / 高级」。开关一律原生胶囊
+     * （.cb-opt .checkbox-container，样式见 styles_src/cb.css），
+     * 所有解释性文字降级成 title 悬浮提示，面板正文里不铺小字。 */
+    const behBox = this.addGroup("看板行为");
+    this.addToggle(behBox, K_DUP, true, "允许重复", "一条笔记可以同时出现在多个板块里");
     this.addToggle(
-      optRow, K_CATCH, this.pluginCatchDefault(),
-      "显示收容所（未被任何板块命中的笔记）· 没设过时跟随插件设置（插件里现在=" +
+      behBox, K_CATCH, this.pluginCatchDefault(), "显示收容所",
+      "未被任何板块命中的笔记归到「收容所」板块。没单独设过时跟随插件设置（插件里现在=" +
         (this.pluginCatchDefault() ? "显示" : "隐藏") + "）"
     );
-    this.addToggle(optRow, K_BODY, false, "显正文（板块没单独指定时的默认）");
-    /* R13（boss：界面翻新）：低频/进阶选项收进默认折叠的「高级」组 —— 原生 <details>，
-     * 样式走原生变量（styles_src/cb.css 的 .cb-panel-adv）。键与语义不变（r12 C 组断言守着）。 */
-    const advRow = this.panelBodyEl.createEl("details", { cls: "cb-panel-adv" });
-    advRow.createEl("summary", { text: "高级：正文细节与拖动行为" });
-    const advBody = advRow.createDiv({ cls: "cb-opt-row" });
-    this.addToggle(advBody, K_YAML, false, "显示 YAML 前言（板块可单独覆盖）");
-    this.addToggle(advBody, K_LINKS, true, "显示结尾「关联笔记」双链（板块可单独覆盖）");
-    this.addToggle(advBody, K_MOVE, true, "拖动搬文件（关 = 恢复旧版：Alt + 拖动才搬文件）");
+    this.addToggle(behBox, K_BODY, false, "显正文", "板块没单独指定正文开关时的默认值");
+    this.addToggle(behBox, K_RO, false, "只读", "关掉看板上全部就地编辑（＝顶栏那把锁）");
 
-    const list = this.panelBodyEl.createDiv({ cls: "cb-panel-list" });
+    const secBox = this.addGroup("板块");
+    const list = secBox.createDiv({ cls: "cb-panel-list" });
     if (this.secs.length === 0) {
-      list.createDiv({ cls: "cb-hint", text: "还没有板块。点下面「＋ 添加板块」开始；不配板块时看板会沿用 base 的自动分组。" });
+      list.createDiv({ cls: "cb-hint", text: "还没有板块，点「＋ 添加」开始；不配板块时沿用 base 的自动分组。" });
     }
     for (let i = 0; i < this.secs.length; i++) this.renderRow(list, i);
 
-    const addWrap = this.panelBodyEl.createDiv({ cls: "cb-add-wrap" });
+    const addWrap = secBox.createDiv({ cls: "cb-add-wrap" });
     if (!this.addOpen) {
-      const b = addWrap.createEl("button", { cls: "cb-add-btn", text: "＋ 添加板块" });
+      const b = addWrap.createEl("button", { cls: "cb-add-btn", text: "＋ 添加" });
+      b.setAttr("title", "添加一个板块");
       b.addEventListener("click", () => {
         this.addOpen = true;
         this.editIdx = -1;
         this.renderPanel();
       });
     } else {
-      addWrap.createSpan({ cls: "cb-add-label", text: "选数据源：" });
+      addWrap.createSpan({ cls: "cb-add-label", text: "数据源" });
       for (const t of ADDABLE) {
         const b = addWrap.createEl("button", { cls: "cb-add-type", text: SOURCE_LABEL[t] });
         b.setAttr("data-type", t);
@@ -3466,17 +3501,31 @@ class CreationBoardView extends BasesViewBase {
       });
     }
 
-    /* 第 4 轮：配置复制 / 导入 */
-    this.renderIoBox(this.panelBodyEl);
+    /* R13 起：低频项收进默认折叠的「高级」组（原生 <details>）。
+     * 键与语义不变（r12 C 组断言守着）。 */
+    const advRow = this.panelBodyEl.createEl("details", { cls: "cb-panel-adv" });
+    advRow.createEl("summary", { text: "高级" });
+    const advBody = advRow.createDiv({ cls: "cb-opt-row" });
+    this.addToggle(advBody, K_YAML, false, "显示 YAML 前言", "板块可单独覆盖");
+    this.addToggle(advBody, K_LINKS, true, "显示结尾双链", "底部「关联笔记」段；板块可单独覆盖");
+    this.addToggle(advBody, K_MOVE, true, "拖动搬文件", "关 = 恢复旧版：Alt + 拖动才搬文件");
+    this.renderIoBox(advRow);
+  }
+
+  /** R20 需求4-②：分段 —— 一个小标签 + 一组控件（段落名保持极简） */
+  addGroup(label) {
+    const grp = this.panelBodyEl.createDiv({ cls: "cb-grp" });
+    grp.createDiv({ cls: "cb-grp-lb", text: label });
+    return grp.createDiv({ cls: "cb-grp-body" });
   }
 
   renderIoBox(parent) {
-    /* R14（boss：界面很丑）：裸 JSON 不上台面 —— 整块收进默认折叠的「高级」组 */
-    const wrap = parent.createEl("details", { cls: "cb-io cb-panel-adv" });
-    wrap.createEl("summary", { text: "高级：配置搬运（复制 / 导入板块配置）" });
+    /* R20 需求4-②：裸 JSON 不占台面 —— 收进「高级」组里再折一层，summary 只说做什么 */
+    const wrap = parent.createEl("details", { cls: "cb-io" });
+    wrap.createEl("summary", { text: "配置搬运（复制 / 导入）" });
     const box = wrap.createDiv({ cls: "cb-io-body" });
     const head = box.createDiv({ cls: "cb-io-head" });
-    head.createSpan({ cls: "cb-field-label", text: "配置搬运（复制 / 导入板块配置）" });
+    head.createSpan({ cls: "cb-field-label", text: "整块复制 / 导入这份看板的配置" });
     const btns = head.createDiv({ cls: "cb-io-btns" });
     const b1 = btns.createEl("button", { cls: "cb-mini cb-io-copy", text: "复制配置" });
     b1.setAttr("title", "把当前视图选项 + 全部板块导出成 JSON（同时尽力写进剪贴板）");
@@ -3504,11 +3553,14 @@ class CreationBoardView extends BasesViewBase {
     if (this.ioState) box.createDiv({ cls: "cb-io-msg", text: this.ioState });
   }
 
-  addToggle(parent, key, dflt, label) {
+  /* R20 需求4-②：一行开关 = 「短标签 + 原生胶囊」；解释文字走 title，面板里不铺小字 */
+  addToggle(parent, key, dflt, label, tip) {
     const row = parent.createDiv({ cls: "cb-opt" });
     row.setAttr("data-key", key);
+    if (tip) row.setAttr("title", tip);
     const on = this.optBool(key, dflt);
-    const cb = row.createEl("input", { cls: "cb-opt-box", type: "checkbox" });
+    const sw = row.createEl("label", { cls: "checkbox-container" });
+    const cb = sw.createEl("input", { cls: "cb-opt-box", type: "checkbox" });
     cb.checked = on;
     const lab = row.createEl("label", { cls: "cb-opt-label", text: label });
     const apply = (v) => {
@@ -3654,7 +3706,7 @@ class CreationBoardView extends BasesViewBase {
 
     if (sec.source === "folder") {
       const r = box.createDiv({ cls: "cb-field cb-field-col" });
-      r.createSpan({ cls: "cb-field-label", text: "目录（点选）" });
+      r.createSpan({ cls: "cb-field-label", text: "目录" });
       this.renderFolderTree(r, sec.path, (p) => {
         if (cleanFolder(p) === this.secs[i].path) return;
         this.secs[i].path = cleanFolder(p);
@@ -3679,7 +3731,7 @@ class CreationBoardView extends BasesViewBase {
       r.createSpan({ cls: "cb-field-label", text: "公式" });
       this.renderFormulaPicker(r, sec.formula, i);
     } else if (sec.source === "catchall") {
-      box.createDiv({ cls: "cb-hint", text: "收容所固定排最后；由上面的「显示收容所」开关控制是否出现在看板上。" });
+      box.createDiv({ cls: "cb-hint", text: "收容所固定排最后；是否出现由「看板行为 → 显示收容所」控制。" });
     } else {
       box.createDiv({ cls: "cb-hint", text: "这个数据源还不支持（可在 YAML 里手写成 folder / tag / formula / catchall）。" });
     }
@@ -3712,41 +3764,41 @@ class CreationBoardView extends BasesViewBase {
       this.afterChange();
     });
 
-    /* —— 第 3 轮：板块级的 显正文 / 属性 —— */
-    const rb = box.createDiv({ cls: "cb-field" });
-    rb.createSpan({ cls: "cb-field-label", text: "显正文" });
-    const bs = rb.createEl("select", { cls: "cb-input cb-select-body" });
-    const bl = this.viewBodyDefault() ? "开" : "关";
-    for (const pair of [["", "继承视图（现在=" + bl + "）"], ["true", "开"], ["false", "关"]]) {
-      const o = bs.createEl("option", { text: pair[1] });
-      o.value = pair[0];
-    }
-    bs.value = sec.body === true ? "true" : sec.body === false ? "false" : "";
-    bs.addEventListener("change", () => {
-      this.secs[i].body = bs.value === "" ? null : bs.value === "true";
-      this.afterChange();
-    });
-
-    /* —— R12（boss 第 3 条）：板块级的 显示 YAML / 显示结尾双链（三态，继承视图默认） —— */
+    /* R20 需求4-③（boss：板块边上的设置只管这一块，界面要清晰简洁）：
+     * 三态（继承 / 开 / 关）从下拉换成并排小按钮 —— 当前态一眼可见、改一下点一下。
+     * 键与语义完全不变（r12 C 组断言守着）：null = 继承视图默认。 */
     const mkTri = (label, cls, key, viewOn) => {
       const r = box.createDiv({ cls: "cb-field" });
       r.createSpan({ cls: "cb-field-label", text: label });
-      const s = r.createEl("select", { cls: "cb-input " + cls });
-      for (const pair of [["", "继承视图（现在=" + (viewOn ? "开" : "关") + "）"], ["true", "开"], ["false", "关"]]) {
-        const o = s.createEl("option", { text: pair[1] });
-        o.value = pair[0];
+      const seg = r.createDiv({ cls: "cb-seg " + cls });
+      const cur = this.secs[i][key];
+      const curVal = cur === true ? "true" : cur === false ? "false" : "";
+      const opts = [
+        ["", "继承", "跟随视图默认（现在 = " + (viewOn ? "开" : "关") + "）"],
+        ["true", "开", "这一块一定显示"],
+        ["false", "关", "这一块一定不显示"],
+      ];
+      for (const pair of opts) {
+        const b = seg.createEl("button", { cls: "cb-seg-btn", text: pair[1] });
+        b.setAttr("type", "button");
+        b.setAttr("data-value", pair[0]);
+        b.setAttr("title", pair[2]);
+        if (pair[0] === curVal) b.addClass("is-on");
+        b.addEventListener("click", () => {
+          const nv = pair[0] === "" ? null : pair[0] === "true";
+          if (this.secs[i][key] === nv) return;
+          this.secs[i][key] = nv;
+          this.afterChange();
+        });
       }
-      s.value = sec[key] === true ? "true" : sec[key] === false ? "false" : "";
-      s.addEventListener("change", () => {
-        this.secs[i][key] = s.value === "" ? null : s.value === "true";
-        this.afterChange();
-      });
     };
-    mkTri("显示 YAML", "cb-select-yaml", "yaml", this.optBool(K_YAML, false));
-    mkTri("显示结尾双链", "cb-select-links", "links", this.optBool(K_LINKS, true));
+    mkTri("显正文", "cb-seg-body", "body", this.viewBodyDefault());
+    mkTri("显示 YAML", "cb-seg-yaml", "yaml", this.optBool(K_YAML, false));
+    mkTri("显示结尾双链", "cb-seg-links", "links", this.optBool(K_LINKS, true));
 
     const rp = box.createDiv({ cls: "cb-field cb-field-col" });
-    rp.createSpan({ cls: "cb-field-label", text: "属性（逗号分隔；留空 = 继承视图，视图也留空则取每篇前 5 个）" });
+    const rpl = rp.createSpan({ cls: "cb-field-label", text: "属性" });
+    rpl.setAttr("title", "逗号分隔。留空 = 继承视图；视图也留空则取每篇笔记前 5 个属性");
     const pi = rp.createEl("input", { cls: "cb-input cb-input-props", type: "text" });
     pi.value = (sec.props || []).join(", ");
     pi.setAttr("placeholder", "例：简介, 平台, 状态, 目标发布日, 文件位置");
@@ -4038,6 +4090,12 @@ class CreationBoardView extends BasesViewBase {
   }
 
   /* ---------- 视图选项（必须是**函数**；Bases 会 options(config) 调用） ----------
+   * R20 需求4-①（老板截图6）：点击「创作看板」标题进的就是这个面板 —— 它只负责**快速调节
+   * 这个视图长什么样**，所以这里**只留显示外观类必要项**：
+   *   卡片最小宽度 / 空位铺满整行 / 显示属性 / 显正文 / 正文字数上限 / 属性默认展开。
+   * 「看板行为与范围」那几项（只读 / 允许重复 / 显示收容所 / 排除目录 / 总条数上限）
+   * 已统一收到顶栏「板块」面板（唯一入口）—— 两处写的是**同一份** .base 视图配置，
+   * 老配置照旧被读到，不会因为这里少了几项就失效。
    * 描述项是**扁平**结构（已核实核心 cards/list/table 的写法）：
    *   {displayName, type, key, default, min, max, step, options, placeholder, filter, shouldHide}
    * 可用 type 只有：toggle / dropdown / text / textarea / number / file / folder / slider / color / secret / property
@@ -4059,21 +4117,8 @@ class CreationBoardView extends BasesViewBase {
       { displayName: "显正文（板块没单独指定时的默认）", type: "toggle", key: K_BODY, default: false },
       { displayName: "正文字数上限（0 = 不截断，正文区自己滚）", type: "number", key: K_CHARS, min: 0, max: 50000, step: 50, default: DEFAULT_CHARS, instant: true, shouldHide: () => !readBool(K_BODY) },
       { displayName: "属性默认展开（卡片与就地编辑浮层里的属性区）", type: "toggle", key: K_PROS_OPEN, default: true },
-      { displayName: "只读（关掉全部就地编辑，也关掉「＋」新建）", type: "toggle", key: K_RO, default: false },
-      { displayName: "允许重复（一条笔记可进多个板块）", type: "toggle", key: K_DUP, default: true },
-      {
-        displayName: "显示收容所（未被任何板块命中的笔记；没设过时跟随插件设置）",
-        type: "toggle", key: K_CATCH, default: !!PLUGIN_SETTINGS.catchAllDefault,
-      },
-      /* —— 第 4 轮：性能护栏（按目录**段**匹配，写 99_Meta 就够） —— */
-      {
-        displayName: "排除目录（逗号分隔；按目录段匹配，例：99_Meta）",
-        type: "text", key: K_EXCLUDE, default: "", placeholder: "99_Meta, 02_旧知识库",
-      },
-      {
-        displayName: "总条数上限（0 = 不限；超了会在工具条上如实写截断数）",
-        type: "number", key: K_CAP, default: 0, min: 0,
-      },
+      /* R20：以上 6 项是「显示外观」。只读 / 允许重复 / 显示收容所 / 排除目录 / 总条数上限
+       * 已移出本面板 —— 在顶栏「板块」里改（同一份 .base 配置，键名一个没变）。 */
     ];
   }
 }

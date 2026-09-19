@@ -265,13 +265,19 @@
   font-weight: var(--font-semibold);
   color: var(--text-normal);
 }
-.kbt-status .kbt-status-sub {
-  margin-top: var(--size-2-1);
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  line-height: 1.5;
+/* R20 需求1：状态栏只剩「在 / 不在」—— 前面一颗小圆点（开 = 马卡龙绿，关 = 灰） */
+.kbt-status .kbt-led {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-faint);
+  opacity: .45;
 }
-.kbt-status .kbt-status-sub:empty { display: none; margin: 0; }
+.kbt-status .kbt-led.is-on {
+  background: var(--color-green);
+  opacity: 1;
+}
 /* 行尾那一小句「详情 ›」：提示整栏可点 */
 .kbt-status .kbt-status-more {
   margin-left: auto;
@@ -364,9 +370,7 @@
 }
 
 /* ---- 帮助（每页一栏 + 悬浮小窗） ---- */
-.kbt-help-row .setting-item-description { color: var(--text-faint); }
 /* 模块关着时整段置灰，但辅助栏 / 帮助栏 / 状态栏必须还能点（状态栏是纯读数） */
-.kb-module-disabled .kbt-help-row { pointer-events: auto; opacity: 1; }
 .kb-module-disabled .kbt-sec.is-aux { pointer-events: auto; opacity: 1; }
 .kb-module-disabled .kbt-sec.kbt-status-card { pointer-events: auto; opacity: 1; }
 

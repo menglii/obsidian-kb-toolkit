@@ -355,6 +355,19 @@
   height: auto;
   line-height: 1.5;
   cursor: pointer;
+  /* R20 需求3：按钮里装的是「自绘 SVG + 文字」——改 flex 对齐（不再靠 emoji 字形基线） */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cb-gear-icon {
+  flex: 0 0 auto;
+  display: block;
+}
+
+.cb-gear-text {
+  line-height: 1;
 }
 
 .cb-refresh {
@@ -430,6 +443,62 @@
   cursor: pointer;
   user-select: none;
 }
+
+/* R20 需求4-②：面板分三段（看板行为 / 板块 / 高级）—— 段落名极简，控件成组 */
+.cb-grp {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cb-grp-lb {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+.cb-grp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* R20 需求4-②：开关改成原生胶囊（与设置页 .kbt-switch 同款参数，34×19）。
+   ::after 的 margin / transform 都要显式清掉 —— 原生那套会让滑块歪掉。 */
+.cb-opt .checkbox-container {
+  width: 34px;
+  height: 19px;
+  border-radius: 999px;
+  background: var(--background-modifier-border);
+  border: none;
+  box-shadow: none;
+  position: relative;
+  margin: 0;
+  flex: 0 0 auto;
+  transition: background-color 0.18s ease;
+}
+
+.cb-opt .checkbox-container::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  margin: 0;
+  transform: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--background-primary);
+  box-shadow: none;
+  transition: transform 0.18s ease, background-color 0.18s ease;
+}
+
+.cb-opt .checkbox-container.is-enabled { background: var(--interactive-accent); opacity: 0.82; }
+.cb-opt .checkbox-container.is-enabled::after { transform: translateX(15px); background: var(--text-on-accent); }
+
+/* 兜底：主题不给 is-enabled 时，直接按 input 勾选态来 */
+.cb-opt .checkbox-container:has(input:checked) { background: var(--interactive-accent); }
+.cb-opt .checkbox-container:has(input:checked)::after { transform: translateX(15px); }
 
 /* ---------- 板块行 ---------- */
 .cb-panel-list {
@@ -601,6 +670,40 @@
   padding: 0 6px;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* R20 需求4-③：三态（继承 / 开 / 关）改成并排小按钮，当前态高亮 */
+.cb-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  flex: 0 0 auto;
+}
+
+.cb-seg-btn {
+  font-size: var(--font-ui-smaller);
+  padding: 0 8px;
+  height: auto;
+  line-height: 1.7;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.cb-seg-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.cb-seg-btn.is-on {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  opacity: 0.9;
 }
 
 .cb-picker-row {
@@ -1098,10 +1201,20 @@
 
 /* ---------- 配置搬运（复制 / 导入） ---------- */
 .cb-io {
-  margin-top: 12px;
-  padding-top: 8px;
+  margin-top: 8px;
+  padding-top: 6px;
   border-top: 1px dashed var(--background-modifier-border);
 }
+
+.cb-io > summary {
+  cursor: var(--cursor);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  padding: var(--size-2-1) 0;
+  list-style: none;
+}
+
+.cb-io[open] > summary { color: var(--text-normal); }
 
 .cb-io-head {
   display: flex;
@@ -1159,6 +1272,9 @@
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
+  /* R20 需求3：装的是自绘 SVG（不再是 emoji 字形） */
+  display: inline-flex;
+  align-items: center;
 }
 .cb-sec-gear:hover {
   color: var(--text-normal);

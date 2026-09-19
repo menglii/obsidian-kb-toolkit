@@ -279,6 +279,11 @@ KB.define("core/settingTab", function () {
     });
     var aboutBtn = ghostBtns.createEl("button", { cls: "kbt-ghost-btn", attr: { type: "button" }, text: "关于" });
     aboutBtn.addEventListener("click", function () { tab._openPop("about"); });
+    /* R20 需求2：帮助入口就放这儿（点开的是**当前标签页**的帮助小窗） */
+    var helpBtn = ghostBtns.createEl("button", { cls: "kbt-ghost-btn", attr: { type: "button" }, text: "帮助" });
+    helpBtn.addEventListener("click", function () {
+      tab._openPop((tab._tab || "rebuild") + ":help");
+    });
 
     /* ================= R18：搜索框（整行输入框，无标题行） ================= */
     var searchInput = containerEl.createEl("input", { cls: "kbt-search-input",
@@ -460,11 +465,11 @@ KB.define("core/settingTab", function () {
         .onChange(function (v) { applyModule(key, v); }); });
       groups[key].createEl("div", { cls: "kbt-rule" });      /* 短横：只占左边一小条 */
     }
-    /* R19 需求3：状态 = 独立一栏（栏目名「当前状态」+ 卡片），**整栏可点** → 悬浮窗看全部状态。
-     * 老板原话：「这些说明文字各自弄成一栏，点击可查看当前状态信息，以悬浮窗显示」。
-     * 所以页面上只留 主行 + 一句短副行；细节全部进 statusPop（调用方用 setItems 塞）。
+    /* R20 需求1（老板截图1）：「当前状态的小字部分通通去掉，只留下是否启用的信息」。
+     * 所以 **不再有副行小字** —— 主行只报「已启用 / 未启用」（前面一颗状态圆点），
+     * 其余一切细节仍旧全部进 statusPop（调用方用 setItems 塞；整栏可点、ⓘ 也开同一个窗）。
      * 注意：openStatus 是函数声明（会提升），可以先用后定义。 */
-    function statusLine(box, mainText, tip) {
+    function statusLine(box, tip) {
       var key = box._kbKey || tab._tab || "";
       var popKey = key + ":status";
       var wrap = buildPop(box, popKey, "当前状态 · " + (TAB_LABEL[key] || ""), []);
@@ -473,13 +478,15 @@ KB.define("core/settingTab", function () {
       var card = sec.createEl("div", { cls: "kbt-card" });
       var el = card.createEl("div", { cls: "kbt-status callout", attr: { "data-callout": "info" } });
       var top = el.createEl("div", { cls: "kbt-status-top" });
+      var led = top.createEl("span", { cls: "kbt-led" });
       var m = top.createEl("div", { cls: "kbt-status-main" });
-      m.textContent = mainText;
+      var on = S.modules[key] === true;
+      m.textContent = on ? "已启用" : "未启用";
+      if (on && led.classList) led.classList.add("is-on");
       infoDot(top, tip || "提示", openStatus);
       top.createEl("span", { cls: "kbt-status-more", text: "详情 ›" });
-      var sub = el.createEl("div", { cls: "kbt-status-sub setting-item-description" });
       var st = {
-        el: el, main: m, sub: sub, sec: sec, card: card, open: openStatus, items: [],
+        el: el, main: m, led: led, sec: sec, card: card, open: openStatus, items: [],
         setItems: function (list) {
           st.items = list || [];
           if (wrap && wrap._kbFill) wrap._kbFill(st.items);
@@ -509,16 +516,12 @@ KB.define("core/settingTab", function () {
       d.createEl("summary", { text: "高级" });
       return d.createEl("div", { cls: "kbt-card" });
     }
-    /* 每页底部一栏「帮助」：点开悬浮小窗（上下滑动看全部提示） */
-    function helpRow(box, key) {
-      var card = makeSec(box, "帮助");
-      var s = new obsidian.Setting(card)
-        .setName("本页提示").setDesc("一行一条 —— 点开可上下滑动看全部");
-      s.addButton(function (b) { b.setButtonText("查看提示")
-        .onClick(function () { tab._openPop(key); }); });
-      var el = s.settingEl || s.el;
-      if (el && el.classList) el.classList.add("kbt-help-row");
-      return buildPop(box, key, "提示 · " + (TAB_LABEL[key] || ""), HELP[key] || []);
+    /* R20 需求2（老板截图2）：每页底部那栏「帮助」整栏撤掉 —— 入口挪到顶部标签行
+     * 「日志 / 关于」右边的「帮助」按钮。这里只把**悬浮小窗**建出来（挂 containerEl、
+     * 默认隐藏），内容仍取 HELP[key]；键 = key + ":help"，按钮按**当前**标签页拼同一个键，
+     * 所以一份内容一个窗、不会串页。 */
+    function helpPop(key) {
+      return buildPop(containerEl, key + ":help", "帮助 · " + (TAB_LABEL[key] || ""), HELP[key] || []);
     }
     var TAB_LABEL = {};
     for (var li = 0; li < TABS.length; li++) TAB_LABEL[TABS[li].key] = TABS[li].label;
@@ -541,8 +544,8 @@ KB.define("core/settingTab", function () {
         text: "模块已关闭 —— 下面这些只是摆出来占位（点不动）；打开上方开关即可启用。" });
     }
 
-    /* R19：状态栏（独立一栏 + 悬浮窗）。副行只留一句短的，长说明全进 statusPop。 */
-    var st0 = statusLine(containerEl, "当前状态：读取中…",
+    /* R20：状态栏只留「是否启用」（见 statusLine）；重建进度等细节全进悬浮窗。 */
+    var st0 = statusLine(containerEl,
       MOD_TIP.rebuild + "　下一步：先「生成预览报告」看看会搬哪些；或用「打开向导」初始化。");
     (async function () {
       try {
@@ -558,8 +561,6 @@ KB.define("core/settingTab", function () {
         var main = st.state === "fresh"
           ? (st.oldFolderExists ? "还没建出库根" : "未创建")
           : (st.state === "done" ? "已是已完成态" : "半成品（顶层仍有待搬项）");
-        st0.main.textContent = "当前状态：" + main + "（新建根 " + st.root + "）";
-        st0.sub.textContent = "顶层待搬 " + st.movableCount + " 项 · 点本栏看详情";
         st0.setItems([
           { k: "状态", v: main },
           { k: "新建根", v: st.root },
@@ -569,8 +570,6 @@ KB.define("core/settingTab", function () {
           { k: "下一步", v: "先点「生成预览报告」看看会搬哪些，或用「辅助」里的向导初始化" }
         ]);
       } catch (e) {
-        st0.main.textContent = "当前状态：读取失败（不影响下方操作）";
-        st0.sub.textContent = "点本栏看详情";
         st0.setItems([
           { k: "状态", v: "读取失败（不影响下方操作）" },
           { k: "可能原因", v: "库根还没建、或元数据目录被改名。可在「高级」里核对两个路径" }
@@ -641,7 +640,7 @@ KB.define("core/settingTab", function () {
     tab.pathDesc(metaSetting, "metaDir");
 
     /* R18：帮助（一栏 + 悬浮小窗） */
-    helpRow(containerEl, "rebuild");
+    helpPop("rebuild");
     };
     makeSection("rebuild"); paintSection("rebuild");
 
@@ -661,11 +660,9 @@ KB.define("core/settingTab", function () {
     try { tplCnt = tplSvc0.listAll(S, tplSvc0.scan(plugin.app, S)).length; } catch (e) { tplCnt = 0; }
     var propKey = S.automation.property || "文件位置";
     var propOpts = (S.automation.propertyOptions || {})[propKey] || [];
-    var stA = statusLine(containerEl, "当前状态：",
+    var stA = statusLine(containerEl,
       MOD_TIP.automation + "　新建补全 " + (S.automation.createFill !== false ? "开" : "关") +
       "，移动同步 " + (S.automation.fixCenterLink !== false ? "开" : "关") + "。");
-    stA.main.textContent = "当前状态：" + (S.modules.automation === true ? "已启用" : "已关闭");
-    stA.sub.textContent = "路由 " + routes + " 条 · 模板 " + tplCnt + " 套 · 点本栏看详情";
     stA.setItems([
       { k: "模块开关", v: S.modules.automation === true ? "打开着" : "关着" },
       { k: "标签-目录映射", v: routes + " 条路由 —— 决定新笔记按标签落到哪个目录" },
@@ -913,7 +910,7 @@ KB.define("core/settingTab", function () {
     addSetting.addButton(function (b) { b.setButtonText("添加").onClick(function () { addRule(); }); });
 
     /* R18：帮助（一栏 + 悬浮小窗） */
-    helpRow(containerEl, "automation");
+    helpPop("automation");
     };
     makeSection("automation"); paintSection("automation");
 
@@ -927,10 +924,7 @@ KB.define("core/settingTab", function () {
       containerEl.createEl("p", { cls: "setting-item-description",
         text: "模块已关闭 —— 下面这些只是摆出来占位（点不动）；打开上方开关即可启用。" });
     }
-    var stB = statusLine(containerEl, "当前状态：", MOD_TIP.base);
-    stB.main.textContent = "当前状态：" + (S.modules.base === true ? "已启用" : "已关闭");
-    stB.sub.textContent = "创作看板 " + (S.modules["base.creationBoard"] !== false ? "开" : "关") +
-      " · 内容流 " + (S.modules["base.noteStream"] !== false ? "开" : "关") + " · 点本栏看详情";
+    var stB = statusLine(containerEl, MOD_TIP.base);
     var boardEx0 = String(S.modules["base.boardExclude"] || "");
     stB.setItems([
       { k: "模块开关", v: S.modules.base === true ? "打开着" : "关着" },
@@ -982,7 +976,7 @@ KB.define("core/settingTab", function () {
       .setDesc("在笔记里打开看板 → 视图右上角 ⚙ 里调，每个看板各存一份");
 
     /* R18：帮助（一栏 + 悬浮小窗） */
-    helpRow(containerEl, "base");
+    helpPop("base");
     };
     makeSection("base"); paintSection("base");
 

@@ -140,6 +140,19 @@ python .workbuddy/tmp/sync_plugin_to_sandbox.py
 51. 🔴 **「让路」不等于「撒手」（R19 报障：「文件位置」属性整个消失）**：R17 为了不跟 Templater 抢写正文，在「目录被接管」时直接 `return false` 整篇放弃 —— 结果连**属性**都没人补了，老板原来「属性面板里选文件位置 → 笔记自动归位」的功能整个消失。正解 = **按写入面拆分让路粒度**：正文让给它，属性（`processFrontMatter`，只加不覆盖）留给自己。做同类「退让」改动时先问一句：我退的是整篇，还是只是它要写的那一部分？另外补属性时值要**留空** —— 路由判定是「文件位置非空则以它为准」，填成当前目录会把「按标签归位」这条路掐死。
 52. 🔴 **测试里「等事件落地」的时长必须按事件总线的合并窗口算，别拍一个数（R19 踩过）**：`tests/run_r19.js` 的 `newNote()` 起初只 `sleep(120)`，而 `core/eventbus` 把同路径的 `create(180) + changed(180)` 合并 → **360ms** 才派发 → 断言读到的是「什么都没发生」，表现为「源码明明写了却假红」（当时还去怀疑桩对象身份，白费一轮）。**正确做法：从 `EventBus.DEFAULT_DELAY` / `MAX_WAIT` 反推最坏等待**（r17 用的是 400，r19 用 450）。同理，**异步渲染出来的内容**（如 rebuild 页状态栏要 `await detectState()`）也要在断言前留一次等待，否则计数恒为 0。
 
+53. 🔴🔴 **源码级正则断言抓不到「改完当场抛异常」—— 内嵌 Bases 视图要补一层「真 DOM 冒烟」（R20 立）**：`run_r12`/`run_r13`/`run_r15`/`run_r20` 对 `vendor/creation-board.js` 都是**读源码用正则断言**，因此把 `renderPanel()` 改写成调用 `this.addGroup(...)` 这种「函数名写错 / 少写一个参数」的错，**正则全绿、真机一开面板就崩**。R20 的 `tests/run_r20b.js` 就是补这个洞，玩法（可复用）：
+   - 取内嵌实例：`require("main.js")` → `globalThis.KB.modules.CreationBoardPlugin` 是**类**（build.js 把 vendor 包成 IIFE，末行 `KB.modules.<Name> = module.exports`）。
+   - 取视图工厂：`new Plugin(app, {id:"creation-board", dir:"…"})` → `inst.data = {}` → `await inst.load()` → **桩** `Plugin.registerBasesView` 会把 `{id, def}` 推进入 `inst._basesViews`（真机走 `app.internalPlugins` 的 bases）→ `def.factory(ctrl, host)`。
+   - 视图**不从库读数据**：`this.sections` 来自 `this.data.data`（Bases 结果），所以必须手喂条目 —— 形状 `{ file:{path,name,basename,extension,parent:{path},stat:{mtime}}, frontmatter, getValue(id){} }`；只往桩的 `vault.create` 里灌文件是**没用的**（会渲染成「没有匹配的笔记」空态）。
+   - 配置**必须走 `v.config`**（`{get/set/getOrder/getSort/query:{save}}`）再调 `v.repaint(false)`：`repaint` 会 `loadSecs()` 把 `this.secs` **从配置覆盖掉**，手动赋 `v.secs = [...]` 会被冲掉。
+   - 桩的 `Element.prototype.createEl` 记得处理 `opts.type`：仓库里几个套件的 polyfill 只认 `text/cls/attr`，于是 `createEl("input",{type:"checkbox"})` **拿不到 type 属性**，`querySelector("input[type=checkbox]")` 永远空 → 断言假红/假绿。
+54. 🔴 **自建开关（不走 `Setting.addToggle`）一定要带 `:has(input:checked)` 兜底（R20 踩到坑边）**：`.checkbox-container.is-enabled` 这个类是 Obsidian 的 `ToggleComponent` 自己加的；插件里若是**手搓** `<label class="checkbox-container"><input type="checkbox">`（R20 看板面板就是），`is-enabled` 永远不出现 → 开关点了不变色。kbt.css（R19 设置页）与 cb.css（R20 看板面板）都靠这两条兜住：
+   ```css
+   .x .checkbox-container:has(input:checked) { background: var(--interactive-accent); }
+   .x .checkbox-container:has(input:checked)::after { transform: translateX(15px); }
+   ```
+   位移量 = 轨道宽 − 2×边距 − 圆径（34−2−15−2 = 15）；并且仍要显式 `margin:0; transform:none`（见铁律 50 的原生 `::after` 那两个默认值）。
+
 ## 坑清单（都已踩过，别再踩）
 
 - Obsidian `Plugin` 是 ES class：继承必须 `class X extends obsidian.Plugin`，`.call(this)` 直接 TypeError。
@@ -218,6 +231,7 @@ python .workbuddy/tmp/sync_plugin_to_sandbox.py
 | R17 | ✅ 完成（待真机验收） | **Templater 模板不再原样倒进笔记**（报障：新建笔记标签没创建 —— 模板指向了 Templater 脚本，整段被倒成正文，`---` 不在首行导致前言失效）：求值成功才写 / 求不到就拒写 / 目录被 Templater 接管则让路 + 修复 8 篇受损笔记 + 三个自研插件退役（归档）（+36 = **1123**/轮，全套 3369 全绿） |
 | R18 | ✅ 完成（待真机验收） | **设置页排版 v3**（照老板桌面上的《设置页排版方案v3-交互效果图.html》重做显示效果；交互不变 —— 帮助栏点开仍是悬浮小窗）：页头版本号右置 + 日志/关于挪到标签行右端 / 搜索框整行、命中他页改「可点提示」不跳页 / 模块头不再挂 ⓘ（挪进状态行）→ 短横 → 状态行 / 栏目改「卡片外小标签 + 次级底卡片 + 行间淡分隔线」/ 核心操作改一行一件事（预览报告·执行·回滚）/ 操作日志并入辅助栏 / 排除目录提为「看板范围」栏 / 三处高级 summary 统一「高级」+ 箭头 CSS 画 / 按钮淡底走 color-mix（前一行留兜底，零裸色）/ 帮助栏条目改「键 + 说明」。**有意不放**卡片宽度与铺满开关（视图级配置，只放指路说明）+ 补掉 r3b 漏检 kbt.css（+57 = **1180**/轮，三连轮 3540 全绿） |
 | R19 | ✅ 完成（待真机验收 5 条） | **老板五条**：① **找回「文件位置」属性**（R17 让路时整篇撒手 → 属性没人补，功能消失；现 `patchLocationKey()`：正文照让、属性照补，`processFrontMatter` 只加不覆盖、值留空、`writeBack` 关则不碰）② **开关圆点扶正**（真根因是原生 `::after` 的 `margin-top` + 关闭态 `translate3d` 没被清 → 显式 `margin:0; transform:none`；轨道 `999px` 胶囊）+ **模块栏加框** ③ **状态说明各自成栏**（`statusLine()` = `.kbt-sec.kbt-status-card` 整栏可点 → 悬浮窗「键 + 说明」逐条，三页各一栏）④ **核心操作按钮去彩底**（删 `.kbt-card .mod-cta/.mod-warning` 单开配色 → 栏内统一素色；页头收编横幅的红色警示保留）⑤ **提示精简**（`MOD_TIP` ≤18 字 + 7 处说明砍一句 + 清 Markdown 反引号残字）（+51 = **1233**/轮，三连轮 3699 全绿；沙盒 229 + 真库副本 247 + bases-preview 45 全绿） |
+| R20 | ✅ 完成（待真机验收 4 条） | **老板四条**：① **状态只留是否启用**（`statusLine(box, tip)` 删掉 `.kbt-status-sub` 副行与「当前状态 ·」前缀，主行只报 已启用/未启用 + 一颗 `.kbt-led` 圆点；细节全在原有的状态悬浮窗里）② **帮助入口挪顶栏**（页底「帮助」栏整栏撤掉、`.kbt-help-row` 样式删净；顶栏 = 日志 → 关于 → **帮助**，点它按当前标签页开对应小窗）③ **自绘齿轮图标**（emoji「⚙」→ `gearIcon()`：`createElementNS` 画 14px 线描齿轮，`stroke=currentColor` 跟文字色走；顶栏 + 板块标题两处共用）④ **看板设置界面重做 + 三入口分工钉死**（视图标题 = 快速调节，`getViewOptions` 11→6 项只留显示类；顶栏齿轮 = 整个看板，`renderPanel` 三段式「看板行为/板块/高级」+ 原生胶囊开关 + 说明全进 title；板块齿轮 = 单个板块，三态下拉换 `.cb-seg` 并排按钮组；标签去冗长）（+73 = **1367**/轮，三连轮 4101 全绿；**另加 `run_r20b.js` 看板真 DOM 冒烟 59 条** —— 源码正则抓不到的运行时错在这里兜底；沙盒 229 + 真库副本 247 + bases-preview 45 + DOM 冒烟 59 全绿；复写病自检新增符号各 1 次） |
 | R15 | ✅ 完成（待真机验收） | **①卡片宽度真可调**（新视图选项「空位铺满整行」默认开=R14；关=卡片固定滑杆宽度——修「板块少时 1fr 撑满吞掉滑杆」；滑杆 160–480；就地编辑器开着时宽度变更也即时生效）+ **②主库收编就绪**（Obsidian 运行中不碰启用清单，boss 走 UI：启用 kb-toolkit → ②③ 模块自动 retire 三个旧插件；.base 视图类型同名注册不断供；note-locator data.json 自动迁移）+ **③排查修复 15 处**（P1×3：拖动搬文件同目录 ReferenceError / 公式分组手动顺序键不同源 / 自写属性重绘毁输入框；P2×12：事件总线总期限、回滚阶段B收容开关、报告撞名循环、路由正则转义、模板占位符原型链、lastDraggedPath 清理、锚点记板块名、还原预览 sourcePath、detach 前保存、reveal 定时器、配置搬运补 K_PROS_OPEN、围栏分开数等）+ **修 OneDrive 复写病**（5 文件被整文件复写两遍：build.js/quiet/eventbus/router/sandbox run.js，铁律 47）（991→**1022** 断言；沙盒 229 + 真库副本 247 全绿） |
 | R9 | ✅ 完成（待真机验收 6 条） | **①视图注册走真生命周期**（`inst.load()/unload()` + 注册前 deregisterView；修「拨开关弹同名视图」）+ **②文件位置搬运与重建解耦**（只开 ② 就能用）+ **③静默窗口**（`services/quiet`，重建/回滚期间 ② 整条让路；修第 5/6/7 条回滚被抢文件）+ **④幂等搬运照样写可逆日志**（修「缺件」）+ **⑤journal 继承**（同一轮重跑不丢 `mkdirOld`，修空目录残渣）+ **⑥空目录补删** `sweepEmptyDirs` + **⑦属性默认展开**（看板卡片与浮层）+ **⑧报告如实对账**（真搬成排除 preexisting；收容表 from≠to）（828→835 断言；r5 收口 excluded 4 条；沙盒 171→229，新增 sc7；另加真库副本 sc8 = +18） |
 
@@ -231,7 +245,8 @@ python .workbuddy/tmp/sync_plugin_to_sandbox.py
 - **R13（界面翻新）**：设置页搜索框过滤是否跟手、命中「高级」是否自动展开；三组「高级」折叠是否默认收起、重开设置页不串状态；① 状态横幅是否自动显示库状态与下一步引导；三步主操作条颜色层级（预览主色 / 执行·回滚警示）是否一眼可辨；命令面板是否只剩 4 条；看板面板「高级」组是否收好且三个开关功能不变。
 - **R14（界面美化 11 条）**：设置页组标题与开关是否合并成一行、不再出现两遍文案；状态横幅是否 info callout 且主副分层；全页是否还有字面 `**`；看板板块少时卡片是否铺满整行（不再右侧留白）；编辑表单「基础/显示」分段是否清晰、按钮是否靠右；配置搬运是否收进折叠高级组；内容流长文是否截 2 行、徽章是否 ≤2 个 + 「+N」。
 - **R15（宽度可调 + 收编 + 排查）**：看板视图设置里拖「卡片最小宽度」是否**肉眼可见地变宽变窄**（板块卡片少时点开「空位铺满整行」开关再试）；两个标签板块的笔记住同一目录时拖动是否正常（修 ReferenceError）；公式分组里拖动排序是否不再弹回；改属性时连续打字是否不再被重绘打断；**收编三步**：主库启用「知识库工具集」→ 开 ②（note-locator/auto-note-mover 自动停用、路由自动迁移）→ 开 ③（创作看板/内容流自动停用）→ 确认「内容创作看板」.base 的看板与内容流两个页签照常渲染、第三方插件列表只剩 kb-toolkit + templater + nutstore。
-- **实验库现状**（`C:\Users\wwwzh\OneDrive\Desktop\插件实验`）：**R15 收尾已同步**（SYNC-OK bad=0）。顶层：`01_111/`（老板重建产物）+ `旧文件/` + `操作说明.md` + `未命名.base`。插件目录：`kb-toolkit/` = main.js(468392) + styles.css(35891) + manifest/versions（与主库构建 sha256 一致）；旧 `creation-board/` 幽灵目录已再次进回收站（R12 构建不再往那里写 data.json，不会复活；内嵌桥改落 `kb-toolkit/embed-creation-board/`）。
+- **R20 四条（第九轮报的）**：① 设置页每个模块的「当前状态」是不是只剩「已启用 / 未启用」一行（点整栏或 ⓘ 仍能开悬浮窗看细节）；② 顶部标签行右端是不是「日志 / 关于 / 帮助」三个按钮、页内底部不再有「帮助」栏、点「帮助」开的是**当前这一页**的小窗；③ 看板工具条上的「⚙ 板块」与板块标题旁的齿轮是不是**自绘的线条图标**（跟文字同色、不再是淡紫 emoji）；④ 看板三个设置入口的分工 —— 点**看板标题**进的视图选项是否只剩显示类几项；点**顶栏齿轮**是否看到「看板行为 / 板块 / 高级」三段、开关是胶囊样式、解释文字悬停才出；点**板块标题齿轮**是否看到「继承 / 开 / 关」三个并排按钮而不是下拉。
+- **实验库现状**（`C:\Users\wwwzh\OneDrive\Desktop\插件实验`）：**R20 收尾已同步**（SYNC-OK bad=0）。顶层：`01_111/`（老板重建产物）+ `旧文件/` + `操作说明.md` + `未命名.base`。插件目录：`kb-toolkit/` = main.js(499114) + styles.css(52786) + manifest/versions（与主库构建 sha256 一致）；旧 `creation-board/` 幽灵目录已再次进回收站（R12 构建不再往那里写 data.json，不会复活；内嵌桥改落 `kb-toolkit/embed-creation-board/`）。
 
 ## 决策记录（为什么是这样）
 
