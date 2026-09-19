@@ -727,7 +727,12 @@ class CreationBoardView extends BasesViewBase {
     gearIcon(this.gearBtn);
     this.gearBtn.createSpan({ cls: "cb-gear-text", text: "板块" });
     this.gearBtn.addEventListener("click", () => {
-      this.panelOpen = !this.panelOpen;
+      /* R22：开着就关（走同一套 closePanel），关着才开 */
+      if (this.panelOpen) {
+        this.closePanel();
+        return;
+      }
+      this.panelOpen = true;
       this.editIdx = -1;
       this.addOpen = false;
       this.renderPanel();
@@ -735,14 +740,24 @@ class CreationBoardView extends BasesViewBase {
     const btn = bar.createEl("button", { cls: "cb-refresh", text: "↻ 重载" });
     btn.addEventListener("click", () => this.repaint(true));
 
-    /* —— 板块设置面板（内嵌，不用 Modal → 可离线验） —— */
+    /* —— 板块设置面板（内嵌 DOM，不用 Modal → 可离线验）
+     * R22：改成**悬浮小窗**（老板指 v2 效果图）—— 遮罩 + 居中窗 + 头部 ✕ + 正文自己滚。
+     * 好处：不再在工具条与看板之间占一行、把看板往下挤；板块多时正文内部滚动，窗高封顶。
+     * 仍留在 rootEl 里（不是 Obsidian Modal），所以离线套件照旧能查能点。 */
+    this.maskEl = this.rootEl.createDiv({ cls: "cb-mask is-hidden" });
     this.panelEl = this.rootEl.createDiv({ cls: "cb-panel is-hidden" });
+    this.panelEl.setAttr("role", "dialog");
+    this.panelEl.setAttr("aria-label", "板块设置");
     const ph = this.panelEl.createDiv({ cls: "cb-panel-head" });
     ph.createSpan({ cls: "cb-panel-title", text: "板块设置" });
     this.panelMsgEl = ph.createSpan({ cls: "cb-panel-msg", text: "" });
+    const px = ph.createEl("button", { cls: "cb-panel-x", text: "✕" });
+    px.setAttr("title", "关闭");
+    px.addEventListener("click", () => this.closePanel());
     this.panelBodyEl = this.panelEl.createDiv({ cls: "cb-panel-body" });
 
-    /* 第 5 轮：点面板外面就收起来（⚙ 按钮本身除外，否则会「点了不关」） */
+    /* 第 5 轮：点面板外面就收起来（⚙ 按钮本身除外，否则会「点了不关」）
+     * R22：遮罩盖住整块可视区 → 点遮罩就是「点外面」，这套机制直接复用，不必另绑 */
     this.addOutsideCloser(
       "panel",
       (t) => {
@@ -750,13 +765,7 @@ class CreationBoardView extends BasesViewBase {
         if (t.closest && (t.closest(".cb-panel") || t.closest(".cb-gear"))) return true;
         return false;
       },
-      () => {
-        this.panelOpen = false;
-        this.editIdx = -1;
-        this.addOpen = false;
-        this.confirmIdx = -1;
-        this.renderPanel();
-      }
+      () => this.closePanel()
     );
 
     /* —— 看板列表 —— */
@@ -3468,9 +3477,20 @@ class CreationBoardView extends BasesViewBase {
   /* ============================================================
    * 板块设置面板
    * ============================================================ */
+  /** R22：收起悬浮设置窗 —— ✕ / 点遮罩 / 点窗外 / 再点一下 ⚙，四条路都走这儿 */
+  closePanel() {
+    if (!this.panelOpen) return;
+    this.panelOpen = false;
+    this.editIdx = -1;
+    this.addOpen = false;
+    this.confirmIdx = -1;
+    this.renderPanel();
+  }
+
   renderPanel() {
     if (!this.panelEl) return;
     this.panelEl.toggleClass("is-hidden", !this.panelOpen);
+    if (this.maskEl) this.maskEl.toggleClass("is-hidden", !this.panelOpen);
     if (!this.panelOpen) return;
     this.panelBodyEl.empty();
     this.panelMsgEl.setText(this.saveState || "");

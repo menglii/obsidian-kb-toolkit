@@ -20,6 +20,9 @@ Desktop.ini
 node_modules/
 *.log
 
+# ── 开发草稿（每轮临时脚本 / 截图 / dump，不随库走）──
+tmp/
+
 # 说明：
 # main.js 与 styles.css 是构建产物，但**故意纳入版本库** ——
 # Obsidian 直接运行的就是这两个文件，clone 下来即插即用。

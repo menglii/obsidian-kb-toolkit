@@ -273,6 +273,36 @@ function makeConfig(obj) {
   click(cx.querySelector(".cb-btn-done"));
   eq(v.editIdx, -1, "点「完成」→ 编辑行收起");
 
+  /* ---------- ⑥ R22：板块设置 = 悬浮小窗（遮罩 + ✕ + 点遮罩收起） ---------- */
+  head("R22 · 面板改悬浮小窗");
+  const mask = v.rootEl.querySelector(".cb-mask");
+  ok(!!mask, "窗外有 .cb-mask 遮罩（不是把看板挤下去的一行）");
+  ok(v.panelOpen && !mask.hasClass("is-hidden"), "面板开着时遮罩一起露出来");
+  const xBtn = v.panelEl.querySelector(".cb-panel-head .cb-panel-x");
+  ok(!!xBtn, "窗头有 ✕ 关闭按钮");
+  eq(xBtn && xBtn.getAttribute("title"), "关闭", "✕ 带悬浮说明");
+  ok(v.panelEl.getAttribute("role") === "dialog"
+    && v.panelEl.getAttribute("aria-label") === "板块设置",
+    "窗本体 role=dialog + aria-label（无障碍名说清是什么窗）");
+
+  click(xBtn);
+  ok(!v.panelOpen, "点 ✕ → 面板收起");
+  ok(v.panelEl.hasClass("is-hidden") && mask.hasClass("is-hidden"),
+    "✕ 之后窗与遮罩一起藏（不会留一层灰罩住看板、点哪儿都没反应）");
+
+  click(gearBtn);
+  ok(v.panelOpen && !mask.hasClass("is-hidden"), "再点齿轮 → 窗与遮罩一起回来");
+
+  fire(mask, "mousedown");
+  ok(!v.panelOpen, "点遮罩 → 收起（复用「点外面就收起」那套，没另写一份）");
+  ok(v.panelEl.hasClass("is-hidden") && mask.hasClass("is-hidden"), "遮罩跟着一起收");
+
+  click(gearBtn);
+  ok(v.panelOpen, "齿轮再点一下又开");
+  click(gearBtn);
+  ok(!v.panelOpen && mask.hasClass("is-hidden"),
+    "开着时再点齿轮 = 收起（走同一个 closePanel；真机上这一下先落在遮罩上，结果一样是关）");
+
   console.log("\nR20-看板DOM冒烟: PASS " + pass + " / FAIL " + fail
     + (fail ? "\n" + fails.join("\n") : ""));
   process.exit(fail ? 1 : 0);

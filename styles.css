@@ -375,15 +375,36 @@
   margin-left: 6px;
 }
 
-/* ---------- 面板容器 ---------- */
+/* ---------- R22：遮罩 —— 设置面板改悬浮小窗，点遮罩即收起 ---------- */
+.cb-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background-color: var(--background-modifier-cover);
+}
+
+.cb-mask.is-hidden {
+  display: none;
+}
+
+/* ---------- R22：面板容器 = 居中悬浮小窗（参照 v2 效果图） ----------
+ * 不再在工具条与看板之间占一行把看板往下挤：浮在看板上，正文自己滚、窗高封顶。
+ * 零裸色：底 --background-primary、描边 --background-modifier-border、投影 --shadow-s。 */
 .cb-panel {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-  background-color: var(--background-secondary);
-  padding: 8px 10px;
+  position: fixed;
+  z-index: 41;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, 94vw);
+  max-height: min(84vh, 720px);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-l);
+  background-color: var(--background-primary);
+  box-shadow: var(--shadow-s);
 }
 
 .cb-panel.is-hidden {
@@ -391,10 +412,11 @@
 }
 
 .cb-panel-head {
+  flex: 0 0 auto;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  padding-bottom: 6px;
+  padding: var(--size-4-2) var(--size-4-3);
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
@@ -408,16 +430,42 @@
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
   margin-left: auto;
+  white-space: nowrap;
 }
 
 .cb-panel-msg.is-err {
   color: var(--text-error);
 }
 
+/* 关闭按钮：素色无边框（与栏内按钮统一风格） */
+.cb-panel-x {
+  flex: 0 0 auto;
+  margin: 0 -4px 0 0;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-medium);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cb-panel-x:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
 .cb-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  padding: var(--size-4-3);
 }
 
 /* ---------- 开关 ---------- */

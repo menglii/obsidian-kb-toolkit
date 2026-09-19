@@ -2,6 +2,49 @@
 
 本文件记录 kb-toolkit 每个轮次的可验收交付。版本号只在收尾轮 bump。
 
+## 未发布 — R22（老板一条：「板块设置」面板改成**悬浮窗**）
+
+**老板要求**（2026-09-19，1 张截图 + 指定参考 `桌面/看板设置界面设计v2-效果图.html`）：
+
+> 「继续弄完，弄成悬浮窗，参考 html」
+
+| 改前 | 改后 |
+| --- | --- |
+| 面板 `display:flex` 挤在**工具条与看板之间**，占整行、把看板往下推；板块多了整页变长 | 面板 = **居中悬浮小窗**：遮罩铺满可视区 + 窗 `position:fixed` 浮在看板上 + 窗头（标题 / 状态字 / ✕）+ 正文自己滚、窗高封顶。**看板位置一点没动**（开/关面板量到的 `.cb-list` top 完全一致） |
+
+**落地（照效果图的 `.mask` / `.win` 那套）**
+
+- `.cb-mask`：`position:fixed; inset:0; z-index:40; background:var(--background-modifier-cover)` —— 遮罩**就是**「窗外」，所以第 5 轮那套「点外面就收起」原样复用，没有第二份逻辑。
+- `.cb-panel`：`fixed; z-index:41; left/top:50%; translate(-50%,-50%)`，宽 `min(520px,94vw)`、高 `min(84vh,720px)`、`overflow:hidden`、`--radius-l`、`--background-primary`、`--shadow-s`。
+- `.cb-panel-head`：`flex:0 0 auto` + `align-items:center`（**原来 baseline** —— ✕ 是按钮，按 baseline 会飘）+ `border-bottom` + `--size-4-*` 内边距；状态字 `margin-left:auto` 把 ✕ 顶到最右。
+- `.cb-panel-x`：素色 ✕（无边框 / 透明底 / hover 有反馈），`title="关闭"`。
+- `.cb-panel-body`：`flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain` + `--size-4-3` 内边距。
+- **收起路径收敛成一条** `closePanel()`：✕ / 点遮罩 / 点窗外 / 再点一下 ⚙ —— 四处都走它（原来那段复位逻辑写在 closer 里，与齿轮各一份）。
+
+**验证（三道，都要真东西）**
+
+1. **源码级 `tests/run_r22.js` 48 条**（A 结构 7 · B 收起路径 12 · C 样式 29）：遮罩/窗/✕ 的 DOM 与顺序、`closePanel` 只定义一次（复写病自检）、四条收起路径都指向它、CSS 每条关键属性、R22 段零裸色。
+2. **真 DOM 冒烟 `tests/run_r20b.js` 74 → 86 条**（新增 12 条）：真起视图 → 真点齿轮 → 真点 ✕ → 再开 → **在遮罩上真发 `mousedown`** → 核「窗与遮罩同开同关」。
+3. **真引擎几何取证（本轮新加的一层）**：`tmp/dump_r22_panel.js` 把**出货代码**在 jsdom 里真起出来的面板 DOM 原样 dump，`tmp/render_r22.py` 用**本机 Chrome** 加载「真 DOM + 真 `styles_src/cb.css` + 真 Obsidian 变量」，再用 `--dump-dom` 把 `getBoundingClientRect` / `getComputedStyle` 读回来，`tmp/check_r22_geo.py` **76 条**逐项核对三个用例（浅色 1058×522 / 深色同尺寸 / 矮视口 878×242）。关键读数：
+
+   | 项 | 实到 |
+   | --- | --- |
+   | 窗水平/垂直居中误差 | **0.0 px / 0.0 px** |
+   | 遮罩 | (0,0) 起，尺寸 == 视口，`rgba(0,0,0,0.42)` |
+   | z 序 | 窗 41 > 遮罩 40 |
+   | 窗宽 | 522 px（= min(520,94vw) + 两侧 1px 描边） |
+   | 窗高 | 414.8（上限 438.5 = 84vh）；矮视口用例顶到上限 205.3 → **正文 scrollHeight(377) > clientHeight(377→封顶后超出)** |
+   | 窗头子元素序 | `cb-panel-title, cb-panel-msg, cb-panel-x`（✕ 在最右，与窗头中线差 ≤1.5px） |
+   | 面板开/关时 `.cb-list` top | **完全一致** → 证明面板不再占一行 |
+
+   ⚠️ 两个 harness 保真度坑（记下来，别再踩）：漏 `*{box-sizing:border-box}` 会让 `max-height` 量出「内容盒 + 2px 边框」（以为超限）；「浮在看板上」要量**开关面板前后列表位置是否一致**，不能量「列表 top < 窗头 top」（矮视口下窗头跑到列表上面去了）。
+
+顺手出了三张离屏截图（浅色 / 深色 / 矮视口）供肉眼复核，像素亮度对得上：浅色窗内 249–253 vs 窗外遮罩 148；深色 32–36 vs 11。
+
+**全套**：**1499 断言 / 失败 0 × 3 轮 = 4497**（R21 基线 1439 → +60 = r22 48 + r20b 12）；沙盒 **229 / 0**、真库副本 **247 / 0**、bases-preview 独立套件 **45 / 0**、`run_r3b` 零裸色 **19 / 0**；构建 BUILD-OK（main.js 504,085 B / styles.css 57,841 B）；实验库 SYNC-OK bad=0。
+
+**R22 备份**：`.workbuddy/backup/kb-toolkit-R22-2026-09-19/`（84 文件 / verify_bad=0，`_manifest.json` 记 sha256；`vendor/creation-board.js` = `d955a194…`、`styles_src/cb.css` = `91137215…`）。
+
 ## 未发布 — R21（老板一条：「空位铺满整行」并入「卡片最小宽度」那一行，缩成「自动」+ 开关）
 
 **老板要求**（2026-09-19，2 张截图）：
