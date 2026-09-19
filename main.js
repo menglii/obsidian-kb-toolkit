@@ -147,7 +147,7 @@ const K_CATCH = "显示收容所";
 const K_WIDTH = "卡片最小宽度";
 const K_FILL = "空位铺满整行";   // R15：默认开（R14 行为，1fr 撑满）；关 = 卡片固定为滑杆宽度
 const K_PROPS = "显示属性";     // 字符串（逗号分隔）；空 → 每篇前言前 5 个用户属性
-const K_PROS_OPEN = "属性默认展开";  // R9：卡片 / 就地编辑浮层里的属性区是否默认展开（默认 true）
+const K_PROS_OPEN = "属性默认展开";  // R9 键（卡片 / 就地编辑浮层里的属性区是否默认展开，默认 true）；R23 起控件在顶栏面板「看板行为」组
 const K_BODY = "显正文";        // boolean；板块未单独指定时的默认
 const K_CHARS = "正文字数";     // number；正文截断字数
 const K_RO = "只读";            // boolean；关掉全部就地编辑
@@ -919,7 +919,7 @@ class CreationBoardView extends BasesViewBase {
   viewBodyDefault() {
     return this.optBool(K_BODY, false);
   }
-  /** R9：属性区默认展开？由视图选项「属性默认展开」控制（默认 true）。
+  /** R9：属性区默认展开？由顶栏面板「看板行为」组的「属性默认展开」控制（默认 true；R23 起从原生视图选项挪来）。
    *  想回到第 8/9 轮的「默认折叠」，把这个开关关掉即可（两处都跟随）。 */
   propsOpenDefault() {
     return this.optBool(K_PROS_OPEN, true);
@@ -1024,6 +1024,7 @@ class CreationBoardView extends BasesViewBase {
       String(this.cfgGet(K_PROPS, "")),
       String(this.optBool(K_BODY, false)),
       String(this.optNum(K_CHARS, DEFAULT_CHARS)),
+      String(this.optBool(K_PROS_OPEN, true)),   /* R23：拨「属性默认展开」要即时重绘卡片属性区（原来在原生面板、靠那边触发） */
       String(this.optBool(K_RO, false)),
       String(this.cfgGet(K_EXCLUDE, "~")),
       String(this.cfgGet(K_CAP, "~")),
@@ -1745,7 +1746,7 @@ class CreationBoardView extends BasesViewBase {
     });
 
     /* 属性区（第 9 轮：默认折叠 ⇒ 🔴 R9 改成**默认展开**：老板「我需要属性是默认展开的」。
-       视图选项「属性默认展开」关掉即可退回旧的「默认折叠」。） */
+       顶栏面板「看板行为」组的「属性默认展开」关掉即可退回旧的「默认折叠」。） */
     const propsBox = this.renderProps(card, entry, sec);
     card.__cbHasProps = !!propsBox;   // 第 5 轮：卡片已显示属性 → 编辑器里那份就藏掉（免得两套属性上下打架）
     if (propsBox) {
@@ -3514,6 +3515,10 @@ class CreationBoardView extends BasesViewBase {
         (this.pluginCatchDefault() ? "显示" : "隐藏") + "）"
     );
     this.addToggle(behBox, K_BODY, false, "显正文", "板块没单独指定正文开关时的默认值");
+    /* R23（boss：加一个开关控制笔记的属性是否默认展开）：键还是老的 K_PROS_OPEN（R9 就有），
+     * 只是从原生视图选项面板挪到这儿 —— 挨着「显正文」（一个管正文、一个管属性）。 */
+    this.addToggle(behBox, K_PROS_OPEN, true, "属性默认展开",
+      "卡片 / 就地编辑浮层里的属性区默认展开；关 = 默认折叠（每张卡片上的「属性 ▸」仍可单独展开）");
     this.addToggle(behBox, K_RO, false, "只读", "关掉看板上全部就地编辑（＝顶栏那把锁）");
 
     const secBox = this.addGroup("板块");
@@ -4226,11 +4231,12 @@ class CreationBoardView extends BasesViewBase {
       { displayName: "显示属性（逗号分隔；留空 = 每篇前言前 5 个）", type: "text", key: K_PROPS, default: "", placeholder: "简介, 平台, 状态" },
       { displayName: "显正文（板块没单独指定时的默认）", type: "toggle", key: K_BODY, default: false },
       { displayName: "正文字数上限（0 = 不截断，正文区自己滚）", type: "number", key: K_CHARS, min: 0, max: 50000, step: 50, default: DEFAULT_CHARS, instant: true, shouldHide: () => !readBool(K_BODY) },
-      { displayName: "属性默认展开（卡片与就地编辑浮层里的属性区）", type: "toggle", key: K_PROS_OPEN, default: true },
       /* R20：以上是「显示外观」。只读 / 允许重复 / 显示收容所 / 排除目录 / 总条数上限
        * 已移出本面板 —— 在顶栏「板块」里改（同一份 .base 配置，键名一个没变）。
        * R21：卡片最小宽度 + 空位铺满整行（K_WIDTH / K_FILL）也移走了 —— 顶栏「卡片」组里
-       * 合成一行「文件宽度 [拉杆] 240 px 自动 [开关]」（原生面板一条只占一行，合不成）。 */
+       * 合成一行「文件宽度 [拉杆] 240 px 自动 [开关]」（原生面板一条只占一行，合不成）。
+       * R23（boss：加一个开关控制笔记的属性是否默认展开）：属性默认展开（K_PROS_OPEN）
+       * 也移走了 —— 顶栏「看板行为」组，和「显正文」挨着。 */
     ];
   }
 }

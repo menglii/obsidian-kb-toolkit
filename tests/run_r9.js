@@ -388,9 +388,11 @@ function wireEvents(app) {
     ok(!!reg && typeof reg.options === "function", "I：视图注册项带 options（原生面板据此出控件）");
     const opts = reg.options({ get: () => undefined });
     const pe = opts.filter(o => o.key === "属性默认展开")[0];
-    ok(!!pe, "I：视图选项面板里出现「属性默认展开」");
-    eq(pe && pe.type, "toggle", "I：它是开关控件");
-    eq(pe && pe.default, true, "I：开关默认 true");
+    /* R23（boss：加一个开关控制笔记的属性是否默认展开）：控件从原生视图选项面板
+       挪进顶栏齿轮面板「看板行为」组 —— 键与语义一个没变，只是换了台面。 */
+    eq(!!pe, false, "I（R23）：原生视图选项面板里不再有「属性默认展开」（已挪进顶栏面板）");
+    ok(vs.indexOf('this.addToggle(behBox, K_PROS_OPEN, true, "属性默认展开"') >= 0,
+      "I（R23）：顶栏面板「看板行为」组里出现了「属性默认展开」开关");
   }
 
   /* ================= J. 第 4 条：文件位置搬运能力与重建解耦（只开 ② 就能用） ================= */

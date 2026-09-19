@@ -191,7 +191,7 @@ async function boot(app, modules) {
   {
     const vo = bodyOf(cb, "static getViewOptions(config)");
     ok(vo.length > 0, "D1（需求4-①）：getViewOptions 还是静态方法（Bases 视图选项入口）");
-    ["K_PROPS", "K_BODY", "K_CHARS", "K_PROS_OPEN"].forEach(k => {
+    ["K_PROPS", "K_BODY", "K_CHARS"].forEach(k => {
       ok(vo.indexOf("key: " + k) >= 0, "D2（需求4-①）：视图配置保留显示类项 " + k);
     });
     /* R21：宽度 + 自动也从原生面板挪走了 —— 那边一条 descriptor 只能占一行，
@@ -200,6 +200,9 @@ async function boot(app, modules) {
       ok(vo.indexOf("key: " + k) < 0,
         "D2b（R21）：" + k + " 已从原生视图选项面板挪进顶栏「卡片」组（一行合得成）");
     });
+    /* R23（boss：加一个开关控制笔记的属性是否默认展开）：控件挪进顶栏「看板行为」组 */
+    ok(vo.indexOf("key: K_PROS_OPEN") < 0,
+      "D2c（R23）：K_PROS_OPEN 已从原生视图选项面板挪进顶栏「看板行为」组");
     ["K_RO", "K_DUP", "K_CATCH", "K_EXCLUDE", "K_CAP"].forEach(k => {
       ok(vo.indexOf(k) < 0, "D3（需求4-①）：行为/范围类项 " + k + " 已从视图配置移走（归顶栏整板设置）");
     });

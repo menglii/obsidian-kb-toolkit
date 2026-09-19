@@ -178,8 +178,9 @@ function makeConfig(obj) {
   ok(v.panelOpen && !v.panelEl.hasClass("is-hidden"), "两次重绘后面板都还开着（没被自己关掉）");
 
   const behSwitches = [...v.panelBodyEl.querySelectorAll(".cb-grp-body > .cb-opt")];
-  eq(behSwitches.length, 4, "「看板行为」段 4 个开关");
-  eq(behSwitches.map(e => e.getAttribute("data-key")).join(","), "允许重复,显示收容所,显正文,只读",
+  eq(behSwitches.length, 5, "「看板行为」段 5 个开关（R23 加了「属性默认展开」）");
+  eq(behSwitches.map(e => e.getAttribute("data-key")).join(","),
+    "允许重复,显示收容所,显正文,属性默认展开,只读",
     "开关顺序（键名不变，.base 老配置照样认）");
   ok(behSwitches.every(e => {
     const sw = e.querySelector(".checkbox-container");
@@ -302,6 +303,51 @@ function makeConfig(obj) {
   click(gearBtn);
   ok(!v.panelOpen && mask.hasClass("is-hidden"),
     "开着时再点齿轮 = 收起（走同一个 closePanel；真机上这一下先落在遮罩上，结果一样是关）");
+
+  /* ---------- ⑦ R23：面板里真有一个「属性默认展开」开关，真拨一下看卡片 ---------- */
+  head("R23 · 「属性默认展开」开关（真拨）");
+  click(gearBtn);
+  ok(v.panelOpen, "重新打开面板");
+  const prosRow = v.panelEl.querySelector('.cb-grp-body > .cb-opt[data-key="属性默认展开"]');
+  ok(!!prosRow, "「看板行为」组里出现「属性默认展开」这一行");
+  eq(prosRow.querySelector(".cb-opt-label").textContent, "属性默认展开", "标签就写「属性默认展开」");
+  const prosBox = prosRow.querySelector("input.cb-opt-box[type=checkbox]");
+  ok(!!prosBox, "是原生胶囊开关（.checkbox-container + input.cb-opt-box）");
+  ok(prosBox.checked === true, "默认开（＝属性区默认展开，R9 以来的行为）");
+  ok((prosRow.getAttribute("title") || "").length > 4, "说明在 title 里，面板正文不铺小字");
+
+  const cardA = v.listEl.querySelector(".cb-card");
+  const prosA = cardA && cardA.querySelector(".cb-props");
+  ok(!!prosA, "卡片上真有属性区（.cb-props，来自条目前言）");
+  ok(!!prosA && !prosA.hasClass("cb-pros-fold"), "拨之前：属性区是展开的");
+  eq(cardA.querySelector(".cb-pros-toggle") && cardA.querySelector(".cb-pros-toggle").textContent,
+    "属性 ▾", "旁标写着「属性 ▾」");
+
+  /* 真关掉 → 写回配置 + 卡片属性区当场折叠（这一刀才验得到 computeSig 认没认它） */
+  prosBox.checked = false;
+  fire(prosBox, "change");
+  ok(SAVES.some(s => s.key === "属性默认展开" && s.val === false),
+    "关掉开关 → 写回 config「属性默认展开」= false（键名不变，.base 老配置照认）");
+  eq(v.cfgGet("属性默认展开", true), false, "config 读回 false（不是只改了 DOM）");
+  eq(v.propsOpenDefault(), false, "propsOpenDefault() 跟着变 false（真读了这份配置）");
+
+  const cardB = v.listEl.querySelector(".cb-card");
+  const prosB = cardB && cardB.querySelector(".cb-props");
+  ok(!!prosB && prosB.hasClass("cb-pros-fold"),
+    "关掉后 → 卡片属性区真的折叠了（sig 认这个键 → 拨完即时重绘）");
+  eq(cardB.querySelector(".cb-pros-toggle").textContent, "属性 ▸", "折叠后旁标变「属性 ▸」");
+
+  /* 拨回来：恢复默认展开（配置可逆，别把默认值改坏） */
+  const prosBox2 = v.panelEl.querySelector(
+    '.cb-grp-body > .cb-opt[data-key="属性默认展开"] input.cb-opt-box');
+  ok(!!prosBox2, "重绘后面板里的这一行还在（拨一下没把面板搞崩）");
+  prosBox2.checked = true;
+  fire(prosBox2, "change");
+  ok(SAVES.some(s => s.key === "属性默认展开" && s.val === true), "拨回来 → 写回 true");
+  const prosC = v.listEl.querySelector(".cb-card .cb-props");
+  ok(!!prosC && !prosC.hasClass("cb-pros-fold"), "拨回后属性区重新展开");
+  /* 卡片上那个「属性 ▸」单卡开关照旧能用（只是默认值变了，能力没被砍） */
+  ok(!!v.listEl.querySelector(".cb-card .cb-pros-toggle"), "单卡「属性 ▾ / ▸」按钮仍在（没被这轮砍掉）");
 
   console.log("\nR20-看板DOM冒烟: PASS " + pass + " / FAIL " + fail
     + (fail ? "\n" + fails.join("\n") : ""));

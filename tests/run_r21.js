@@ -122,9 +122,12 @@ const src75 = stripComments(fs.readFileSync(path.join(PLUG, "src", "75_core_sett
   ok(vo.indexOf("key: K_FILL") < 0, "D3：K_FILL 已从原生视图选项面板挪走");
   ok(vo.indexOf("displayName: \"空位铺满整行") < 0 && vo.indexOf("displayName: \"卡片最小宽度") < 0,
     "D4：两个描述项一行不剩（不是靠 shouldHide 藏起来）");
-  ["K_PROPS", "K_BODY", "K_CHARS", "K_PROS_OPEN"].forEach(k => {
+  ["K_PROPS", "K_BODY", "K_CHARS"].forEach(k => {
     ok(vo.indexOf("key: " + k) >= 0, "D5：显示类项 " + k + " 照旧留在原生面板");
   });
+  /* R23：K_PROS_OPEN 也挪进顶栏面板了（「看板行为」组） */
+  ok(vo.indexOf("key: K_PROS_OPEN") < 0,
+    "D5b（R23）：K_PROS_OPEN 已从原生面板挪进顶栏「看板行为」组");
 
   /* 键与语义一个没变 —— 老 .base 配置照旧被读到 */
   ok(cb.indexOf('const K_WIDTH = "卡片最小宽度"') >= 0, "D6：K_WIDTH 键名字面量原样（老配置照认）");
