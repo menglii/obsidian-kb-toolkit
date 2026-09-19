@@ -1,0 +1,238 @@
+/* ============================================================
+ * bases-preview — 「📖 笔记内容流」视图样式
+ * 全部用 Obsidian 主题变量，明暗主题自动适配
+ * ============================================================ */
+
+.bases-note-stream {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 10px 60px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scroll-behavior: smooth;
+}
+
+/* ---------- 顶部迷你工具条（吸顶） ---------- */
+.bns-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 2px;
+  margin: 0 -2px 4px -2px;
+  background-color: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.bns-count {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+.bns-refresh {
+  font-size: var(--font-ui-smaller);
+  padding: 2px 8px;
+  height: auto;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+/* ---------- 分组 ---------- */
+.bns-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bns-group > .bases-group-heading {
+  position: sticky;
+  top: 32px;
+  z-index: 2;
+  background-color: var(--background-primary);
+  padding: 4px 2px;
+}
+
+/* ---------- 单篇卡片 ---------- */
+.bns-item {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background-color: var(--background-primary);
+  padding: 10px 12px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.bns-item:hover {
+  border-color: var(--background-modifier-border-hover);
+  /* R3b：同 cb.css —— 本体阴影变量 + 原值兜底 */
+  box-shadow: var(--shadow-xs, 0 1px 6px rgba(0, 0, 0, 0.06));
+}
+
+.bns-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.bns-title {
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-medium);
+  color: var(--link-color);
+  cursor: pointer;
+  text-decoration: none;
+  background-image: none;
+  border: none;
+}
+
+.bns-title:hover {
+  color: var(--link-color-hover);
+  text-decoration: underline;
+}
+
+.bns-chip {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-l);
+  padding: 0 7px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.bns-mtime {
+  margin-left: auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* ---------- 正文 ---------- */
+.bns-body {
+  font-size: var(--font-text-size);
+  color: var(--text-normal);
+  border-top: 1px dashed var(--background-modifier-border);
+  margin-top: 6px;
+  padding-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.bns-body.bns-loading {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  font-style: italic;
+}
+
+/* 正文里的标题压小一点，避免比卡片标题还抢眼 */
+.bns-body h1,
+.bns-body h2,
+.bns-body h3,
+.bns-body h4,
+.bns-body h5,
+.bns-body h6 {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  margin: 0.7em 0 0.25em 0;
+  line-height: 1.4;
+}
+
+.bns-body > :first-child {
+  margin-top: 0;
+}
+
+.bns-body p,
+.bns-body ul,
+.bns-body ol,
+.bns-body blockquote {
+  margin: 0.35em 0;
+  line-height: 1.55;
+}
+
+.bns-body ul,
+.bns-body ol {
+  padding-inline-start: 1.4em;
+}
+
+.bns-body blockquote {
+  border-inline-start: 3px solid var(--background-modifier-border);
+  padding-inline-start: 10px;
+  color: var(--text-muted);
+}
+
+.bns-body pre {
+  font-size: var(--font-ui-smaller);
+  padding: 8px 10px;
+  border-radius: var(--radius-s);
+}
+
+.bns-body table {
+  font-size: var(--font-ui-smaller);
+}
+
+.bns-body img {
+  max-width: 100%;
+  border-radius: var(--radius-s);
+}
+
+/* 正文里的内部链接用主题色，hover 有预览（source:"bases"） */
+.bns-body a.internal-link {
+  color: var(--link-color);
+}
+
+.bns-more {
+  margin-top: 6px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+.bns-placeholder {
+  margin-top: 4px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+.bns-empty {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+}
+
+.bns-error {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-error);
+}
+
+/* ============================================================
+ * R11（boss 第 2 条）：设置页模块段「不做自动收起」——
+ * 模块关了段落照常渲染、整段置灰禁用；开/关布局零变化，拨开关不跳位。
+ * ============================================================ */
+.kb-module-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* ---------- R14（boss：界面很丑）：紧凑密度 ---------- */
+/* 正文预览截断到 2 行（点击标题看全文） */
+.bns-body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+/* 被折进「+N」的那部分属性 */
+.bns-chip-more {
+  background: transparent;
+  border-style: dashed;
+  color: var(--text-faint);
+}

@@ -1,0 +1,1215 @@
+/* ============================================================
+ * creation-board — 「🗂 创作看板」视图样式
+ * 全部用 Obsidian 主题变量，明暗主题自动适配
+ * ============================================================ */
+
+.cb-root {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 10px 60px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  --cb-card-w: 240px;
+  --cb-card-max: 1fr;
+}
+
+/* ---------- 顶部迷你工具条（吸顶） ---------- */
+.cb-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  margin: 0 -2px 0 -2px;
+  background-color: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.cb-mode {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-l);
+  padding: 0 7px;
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+
+.cb-count {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cb-refresh {
+  margin-left: auto;
+  font-size: var(--font-ui-smaller);
+  padding: 2px 8px;
+  height: auto;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+/* ---------- 列表 ---------- */
+.cb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ---------- 板块 ---------- */
+.cb-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cb-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 0 4px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.cb-tri {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  width: 1em;
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+.cb-tri:hover {
+  color: var(--text-normal);
+}
+
+.cb-section-name {
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+}
+
+.cb-section-count {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.cb-badge {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 0 5px;
+  line-height: 1.5;
+}
+
+.cb-badge-warn {
+  color: var(--text-warning, var(--text-muted));
+}
+
+.cb-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cb-section-body.is-collapsed,
+.cb-sub-body.is-collapsed {
+  display: none;
+}
+
+/* ---------- 第 12 轮：板块三角只折「自己这层」的笔记，子栏目不受牵连 ---------- */
+.cb-grid.is-collapsed {
+  display: none;
+}
+
+/* ---------- 卡片栅格（R14：auto-fill → auto-fit —— 空轨道坍缩，两张卡也能铺满整行，
+ * 修「看板右侧大片空白」） ---------- */
+.cb-grid {
+  display: grid;
+  /* R15：--cb-card-max 由视图渲染时写入 —— 默认 1fr（空位铺满整行，R14 行为）；
+   * 「空位铺满整行」关掉时 = 滑杆宽度（卡片固定宽，滑杆真正可调） */
+  grid-template-columns: repeat(auto-fit, minmax(var(--cb-card-w), var(--cb-card-max, 1fr)));
+  gap: 8px;
+  align-items: start;
+}
+
+.cb-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background-color: var(--background-primary);
+  padding: 8px 10px;
+  min-width: 0;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.cb-card:hover {
+  border-color: var(--background-modifier-border-hover);
+  /* R3b：原为裸 rgba 黑影，深色主题下压不住 → 换本体 --shadow-xs（明暗两套），保留原值兜底 */
+  box-shadow: var(--shadow-xs, 0 1px 6px rgba(0, 0, 0, 0.06));
+}
+
+.cb-title {
+  display: block;
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+  color: var(--link-color);
+  cursor: pointer;
+  text-decoration: none;
+  background-image: none;
+  overflow-wrap: anywhere;
+}
+
+.cb-title:hover {
+  color: var(--link-color-hover);
+  text-decoration: underline;
+}
+
+/* ---------- 第 9 轮：卡片属性默认折叠（顶上只留标题 + 「属性」展开钮） ---------- */
+.cb-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.cb-title-row .cb-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cb-pros-toggle {
+  flex: 0 0 auto;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cb-pros-toggle:hover {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+.cb-props.cb-pros-fold {
+  display: none;
+}
+
+/* ---------- 第 10 轮：右键菜单 / 拖动排序 ---------- */
+.cb-ctxmenu {
+  position: fixed;
+  z-index: var(--layer-modal, 100);
+  min-width: 220px;
+  max-width: 300px;
+  padding: 5px;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-s);
+}
+.cb-ctx-item {
+  padding: 4px 10px;
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-normal);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cb-ctx-item:hover {
+  background-color: var(--background-modifier-hover);
+}
+.cb-ctx-danger {
+  color: var(--text-error);
+}
+.cb-ctx-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background-color: var(--background-modifier-border);
+}
+.cb-ctx-move {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 5px 8px;
+}
+.cb-ctx-move-hint {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.cb-ctx-move-input {
+  width: 100%;
+  font-size: var(--font-ui-smaller);
+  padding: 3px 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+.cb-card.cb-dragging {
+  opacity: 0.5;
+}
+.cb-card.cb-drop-target {
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: -2px;
+}
+/* ---------- 第 13 轮：落在目标卡左半边 / 右半边，亮条标在对应那条竖边上 ---------- */
+.cb-card.cb-drop-target.cb-drop-left {
+  box-shadow: inset 3px 0 0 0 var(--interactive-accent);
+}
+.cb-card.cb-drop-target.cb-drop-right {
+  box-shadow: inset -3px 0 0 0 var(--interactive-accent);
+}
+
+/* ---------- 子板块（缩进一级 + 左侧竖参考线） ---------- */
+.cb-sub {
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 2px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cb-sub-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  cursor: pointer;
+  padding: 1px 0;
+}
+
+.cb-sub-name {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
+}
+
+.cb-sub-head:hover .cb-sub-name {
+  color: var(--text-normal);
+}
+
+.cb-sub-count {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.cb-sub-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* 子板块里的卡片：略微压小，突出层级 */
+.cb-sub-body .cb-card {
+  padding: 6px 9px;
+  background-color: var(--background-secondary);
+}
+
+.cb-sub-body .cb-title {
+  font-size: var(--font-ui-smaller);
+}
+
+/* ---------- 空态 / 提示 ---------- */
+.cb-hint {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  padding: 2px 0;
+}
+
+.cb-empty {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+}
+
+/* ============================================================
+ * 第 2 轮：板块设置面板
+ * （下面 .cb-gear / .cb-refresh 就地覆盖上面的排布，靠层叠生效）
+ * ============================================================ */
+
+.cb-gear {
+  margin-left: auto;
+  font-size: var(--font-ui-smaller);
+  padding: 2px 8px;
+  height: auto;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.cb-refresh {
+  margin-left: 6px;
+}
+
+/* ---------- 面板容器 ---------- */
+.cb-panel {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background-color: var(--background-secondary);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cb-panel.is-hidden {
+  display: none;
+}
+
+.cb-panel-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.cb-panel-title {
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+.cb-panel-msg {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  margin-left: auto;
+}
+
+.cb-panel-msg.is-err {
+  color: var(--text-error);
+}
+
+.cb-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- 开关 ---------- */
+.cb-opt-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.cb-opt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.cb-opt-box {
+  cursor: pointer;
+  margin: 0;
+}
+
+.cb-opt-label {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ---------- 板块行 ---------- */
+.cb-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cb-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  background-color: var(--background-primary);
+}
+
+.cb-row:hover {
+  border-color: var(--background-modifier-border);
+}
+
+.cb-row.is-editing {
+  border-color: var(--interactive-accent);
+}
+
+.cb-row.is-confirming {
+  border-color: var(--text-error);
+}
+
+.cb-row.is-dragging {
+  opacity: 0.45;
+}
+
+.cb-row.is-drop {
+  border-color: var(--interactive-accent);
+  box-shadow: inset 0 0 0 1px var(--interactive-accent);
+}
+
+.cb-grip {
+  cursor: grab;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  letter-spacing: -1px;
+  user-select: none;
+  flex: 0 0 auto;
+}
+
+.cb-grip:hover {
+  color: var(--text-normal);
+}
+
+.cb-grip:active {
+  cursor: grabbing;
+}
+
+.cb-row-name {
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  font-weight: var(--font-medium);
+  cursor: text;
+  min-width: 60px;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cb-row-src {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.cb-src-tag {
+  flex: 0 0 auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 0 4px;
+  color: var(--text-faint);
+}
+
+.cb-src-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* 路径太长时保留尾部（最有信息量的那截） */
+  text-align: left;
+}
+
+.cb-row-count {
+  flex: 0 0 auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cb-row-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.cb-mini {
+  font-size: var(--font-ui-smaller);
+  padding: 0 5px;
+  height: auto;
+  line-height: 1.6;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.cb-mini:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.cb-del.is-confirming,
+.cb-row.is-confirming .cb-del {
+  color: var(--text-on-accent);
+  background-color: var(--text-error);
+}
+
+/* ---------- 编辑行 ---------- */
+.cb-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 6px 22px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--interactive-accent);
+  background-color: var(--background-primary-alt, var(--background-primary));
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+}
+
+.cb-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cb-field-col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.cb-field-label {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  flex: 0 0 4.5em;
+  white-space: nowrap;
+}
+
+.cb-field-col .cb-field-label {
+  flex: 0 0 auto;
+}
+
+.cb-input {
+  font-size: var(--font-ui-smaller);
+  height: 24px;
+  padding: 0 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cb-picker-row {
+  display: flex;
+  gap: 6px;
+}
+
+.cb-picker-row .cb-input {
+  min-width: 0;
+}
+
+/* ---------- 目录树 ---------- */
+.cb-tree {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 3px 0;
+  background-color: var(--background-primary);
+}
+
+.cb-tree-node {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cb-tree-node:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.cb-tree-node.is-picked {
+  background-color: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+  font-weight: var(--font-semibold);
+}
+
+.cb-tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cb-edit-foot {
+  display: flex;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.cb-btn-done,
+.cb-btn-del2 {
+  font-size: var(--font-ui-smaller);
+  padding: 2px 10px;
+  height: auto;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.cb-btn-del2 {
+  color: var(--text-error);
+}
+
+/* ---------- 添加 ---------- */
+.cb-add-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.cb-add-label {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.cb-add-btn,
+.cb-add-type,
+.cb-add-cancel {
+  font-size: var(--font-ui-smaller);
+  padding: 2px 10px;
+  height: auto;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.cb-add-cancel {
+  color: var(--text-muted);
+}
+
+/* ============================================================
+ * 第 3 轮：卡片能读能改（属性排版 / 正文滚动 / 就地编辑）
+ * ============================================================ */
+
+/* ---------- 工具条上的只读开关 ---------- */
+.cb-ro {
+  font-size: var(--font-ui-smaller);
+  padding: 2px 8px;
+  height: auto;
+  line-height: 1.5;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.cb-ro.is-on {
+  color: var(--text-on-accent);
+  background-color: var(--text-warning, var(--interactive-accent));
+}
+
+/* 只读模式下：属性值/正文不再显示「可点」的手型 */
+.cb-root:has(.cb-ro.is-on) .cb-prop-val,
+.cb-root:has(.cb-ro.is-on) .cb-body {
+  cursor: default;
+}
+
+/* ---------- 卡片：留出左上圆点的位置 ---------- */
+.cb-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* 「未落盘」小圆点（有排队中的写入才亮） */
+.cb-dirty {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-warning, var(--color-orange, #d08b2c));
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+  user-select: none;
+}
+
+.cb-dirty.is-on {
+  opacity: 1;
+}
+
+/* ---------- 属性排版：名在上（muted 小字）/ 值在下 ---------- */
+.cb-props {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  /* 第 6 轮：属性区灰一档 —— 和下面的正文（白底）明显分开。
+     老板明确要求「上部属性那一块颜色调灰一点，和下面的笔记做区分」。 */
+  background-color: var(--background-secondary);
+  border-radius: var(--radius-s);
+  padding: 5px 7px;
+}
+
+/* 子板块的卡片底色本来就是 secondary → 换一档更深的（半透明叠加），否则看不出区别 */
+.cb-sub-body .cb-props {
+  background-color: var(--background-modifier-hover, rgba(0, 0, 0, 0.06));
+}
+
+.cb-prop {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  padding: 1px 0;
+  border-radius: var(--radius-s);
+}
+
+.cb-prop.is-editing {
+  background-color: var(--background-modifier-hover);
+  padding: 2px 4px;
+  margin: -1px -4px;
+}
+
+.cb-prop-name {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cb-prop-val {
+  font-size: var(--font-ui-smaller);
+  line-height: 1.45;
+  color: var(--text-normal);
+  overflow-wrap: anywhere;
+  cursor: text;
+  border-radius: var(--radius-s);
+  min-height: 1.2em;
+}
+
+.cb-prop-val:hover {
+  background-color: var(--background-modifier-hover);
+  box-shadow: 0 0 0 2px var(--background-modifier-hover);
+}
+
+.cb-prop-val.is-empty {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.cb-prop-val.is-empty:hover {
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.cb-prop-input {
+  width: 100%;
+  font-size: var(--font-ui-smaller);
+  height: 20px;
+  padding: 0 4px;
+  line-height: 1.4;
+}
+
+.cb-prop-input[type="checkbox"] {
+  width: auto;
+  height: auto;
+  margin: 0;
+}
+
+/* ---------- 就地改名输入框 ---------- */
+.cb-rename-input {
+  display: block;
+  width: 100%;
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+  height: 22px;
+  padding: 0 5px;
+}
+
+/* ---------- 正文区：懒加载 + 高度上限 + 可滚动 ---------- */
+.cb-body {
+  margin-top: 3px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--background-modifier-border);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.55;
+  /* 第 5 轮：正文与属性同色（老板反馈「上下有色差 / 属性那边偏暗」）
+     —— 层次靠字号和分隔线区分，不靠把正文调淡 */
+  color: var(--text-normal);
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  cursor: text;
+  min-width: 0;
+}
+
+.cb-body.cb-body-loading {
+  color: var(--text-faint);
+  font-style: italic;
+  max-height: 60px;
+  cursor: default;
+}
+
+.cb-body-empty,
+.cb-body-error,
+.cb-body-more {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  padding: 1px 0;
+}
+
+.cb-body-error {
+  color: var(--text-error);
+}
+
+.cb-body-more {
+  font-style: italic;
+  border-top: 1px dashed var(--background-modifier-border);
+  margin-top: 4px;
+  padding-top: 3px;
+}
+
+/* 正文里嵌进来的东西整体压小（卡片里空间紧） */
+.cb-body > *:first-child {
+  margin-top: 0;
+}
+
+.cb-body > *:last-child {
+  margin-bottom: 0;
+}
+
+.cb-body p,
+.cb-body ul,
+.cb-body ol,
+.cb-body blockquote,
+.cb-body pre,
+.cb-body table {
+  margin: 0.35em 0;
+}
+
+.cb-body h1,
+.cb-body h2,
+.cb-body h3,
+.cb-body h4,
+.cb-body h5,
+.cb-body h6 {
+  margin: 0.5em 0 0.25em 0;
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+}
+
+.cb-body pre {
+  padding: 4px 6px;
+  font-size: 11px;
+  overflow-x: auto;
+}
+
+.cb-body img,
+.cb-body video {
+  max-width: 100%;
+  height: auto;
+}
+
+.cb-body .internal-embed,
+.cb-body .markdown-embed {
+  margin: 0.3em 0;
+}
+
+/* ---------- 正文就地编辑器（第 7 轮：脱离卡片的浮层小窗） ---------- */
+/* 卡片这边：预览保留但调淡、停掉点击 —— 编辑都去浮层里做 */
+.cb-body.is-editing {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* 浮层本体：挂在 document.body 上，fixed 定位
+   （.cb-root 自己在滚，挂在卡片里会被裁掉 —— 第 7 轮教训） */
+.cb-ed-pop {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--layer-modal, 100);
+  width: min(760px, 92vw);
+  height: min(640px, 80vh);
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-s);
+  overflow: hidden;
+}
+
+/* ① 小标题条 + 明确的「✕ 收起」 */
+.cb-ed-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0 6px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: 6px;
+  flex: 0 0 auto;
+}
+.cb-ed-name {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.cb-ed-close {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+  padding: 1px 6px;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.cb-ed-close:hover {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+/* ② 内容盒：占满浮层剩余高度，自己上下滚（= 在浮层里滑动浏览） */
+.cb-ed-box {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: var(--radius-s);
+  background-color: var(--background-primary);
+}
+
+/* ③ 藏掉挂进来的视图头（← → 标题 🔗 ⋮）—— 浮层标题条已经说明是哪篇了 */
+.cb-ed-pop .cb-ed-box > .view-header,
+.cb-ed-pop .cb-ed-box .view-header {
+  display: none !important;
+}
+
+/* ④ 卡片上已经显示属性了 → 浮层里那份「笔记属性」不再重复显示
+      （这就是「上下两套属性、颜色还不一样」的来源） */
+.cb-ed-pop.cb-hidepros .cb-ed-box .metadata-container,
+.cb-ed-pop.cb-hidepros .cb-ed-box .metadata-properties,
+.cb-ed-pop.cb-hidepros .cb-ed-box .metadata-properties-heading {
+  display: none !important;
+}
+
+/* ⑤ 第 8 轮：浮层里「笔记属性」默认折叠（挂载后替用户点一下原生折叠钮）
+      —— 标题条本来就能点，这里只是让手型提示显性一点 */
+.cb-ed-pop .cb-ed-box .metadata-properties-heading {
+  cursor: pointer;
+}
+
+.cb-ed-pop .markdown-source-view,
+.cb-ed-pop .cm-editor {
+  font-size: var(--font-ui-smaller);
+}
+
+/* 子板块里的卡片：正文收紧一点 */
+.cb-sub-body .cb-body {
+  max-height: 200px;
+}
+
+/* ============================================================
+ * 第 4 轮（能长 + 收口）
+ * ============================================================ */
+
+/* ---------- 板块头「＋」新建 ---------- */
+.cb-plus {
+  margin-left: auto;           /* 推到行末（两个 head 都是 flex） */
+  padding: 0 6px;
+  height: 19px;
+  line-height: 17px;
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.cb-plus:hover {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+.cb-plus.is-off,
+.cb-mini.is-off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cb-plus.is-off:hover,
+.cb-mini.is-off:hover {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: var(--background-modifier-border);
+}
+
+/* ---------- 「＋」刚建好的临时卡片 / 真卡片高亮 ---------- */
+.cb-card-temp {
+  border-style: dashed;
+  opacity: 0.9;
+}
+
+.cb-card.is-new {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
+/* ---------- 外部改动冲突标记 ---------- */
+.cb-conflict {
+  align-self: flex-start;
+  margin-bottom: 3px;
+  padding: 0 5px;
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--text-error);
+  border: 1px solid var(--text-error);
+  border-radius: var(--radius-s);
+  cursor: help;
+}
+
+/* ---------- 配置搬运（复制 / 导入） ---------- */
+.cb-io {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--background-modifier-border);
+}
+
+.cb-io-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.cb-io-btns {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.cb-io-text {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  resize: vertical;
+}
+
+.cb-io-msg {
+  margin-top: 4px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+/* ---------- 设置页（没有 Setting 类时的降级排版） ---------- */
+.cb-set-row {
+  margin: 8px 0;
+}
+
+.cb-set-name {
+  font-weight: var(--font-semibold);
+}
+
+.cb-set-desc {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+/* ============================================================
+ * R12（boss 第 2/4 条）：板块标题 ⚙ 设置入口 + 拖动排序高亮
+ * ============================================================ */
+.cb-head-grab { cursor: grab; }
+.cb-sec-dragging { opacity: 0.5; }
+.cb-sec-drop { outline: 2px dashed var(--interactive-accent); outline-offset: 2px; }
+.cb-sec-gear {
+  margin-left: 4px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.cb-sec-gear:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+/* R12（boss 第 1 条）：悬停在「另一个目录」的卡上 = 整卡高亮（搬文件，不是插位） */
+.cb-card.cb-drop-move { outline: 2px solid var(--interactive-accent); outline-offset: -2px; }
+
+/* R13（界面翻新）：视图设置面板的「高级」折叠组 —— 原生 <details>，样式走原生变量 */
+.cb-panel-adv {
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: var(--size-2-2);
+  padding-top: var(--size-2-1);
+}
+.cb-panel-adv > summary {
+  cursor: var(--cursor);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  padding: var(--size-2-1) 0;
+  list-style: none;
+}
+.cb-panel-adv[open] > summary { color: var(--text-normal); }
+.cb-panel-adv .cb-opt-row { padding-bottom: var(--size-2-1); }
+
+/* ---------- R14（boss：界面很丑）：板块设置面板整理 ---------- */
+/* 完成 / 删除按钮靠右（原生 control 区习惯），删除保持警示色 */
+.cb-edit-foot {
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+/* 表单分段小标题（基础 / 显示） */
+.cb-edit-sep {
+  margin-top: 10px;
+  padding: 4px 0 2px;
+  border-top: 1px solid var(--background-modifier-border);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.cb-edit > .cb-edit-sep:first-child {
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
+}
+/* 目录点选树限高滚动，不再无限撑高面板 */
+.cb-tree {
+  max-height: 220px;
+  overflow-y: auto;
+}
+/* 板块头部：图标与计数垂直居中 */
+.cb-section-head {
+  align-items: center;
+}

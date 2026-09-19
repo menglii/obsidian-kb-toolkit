@@ -1,0 +1,26 @@
+# ── 系统垃圾 ──
+Thumbs.db
+Desktop.ini
+.DS_Store
+._*
+
+# ── 编辑器 / 临时文件 ──
+*.tmp
+*.temp
+*~
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ── 依赖与日志 ──
+node_modules/
+*.log
+
+# 说明：
+# main.js 与 styles.css 是构建产物，但**故意纳入版本库** ——
+# Obsidian 直接运行的就是这两个文件，clone 下来即插即用。
+# 它们的源码在 src/ 与 styles_src/，由 scripts/build.js 拼装生成。

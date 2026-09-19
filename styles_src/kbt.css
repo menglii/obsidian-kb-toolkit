@@ -1,0 +1,469 @@
+/* kbt.css — kb-toolkit 设置页/面板增强样式（R13 界面翻新 / R16 三标签改版 / R18 排版 v3）。
+ * 铁律 6：不允许 var(...) 之外的裸色值；变量必须在 obsidian_vars.txt 白名单里。
+ * R18（boss：照《设置页排版方案v3-交互效果图》重做显示效果）——
+ *   页头（标题+版本号）/ 标签行右端挂「日志·关于」/ 整行搜索框 + 提示条 /
+ *   模块头一行 + 短横 + 状态行（文字旁 ⓘ）/ 栏目＝小标签 + 卡片（行间淡分隔线）/
+ *   「高级」summary 只用 CSS 画箭头 / 按钮改成低饱和淡底（color-mix，前一行留主题色兜底）。
+ * 深色主题：淡底一律用 color-mix(主题色, --background-primary)，跟随主题、零裸色。 */
+
+/* ---- 页头：标题 + 右上角版本号 ---- */
+.kbt-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+  margin-bottom: var(--size-2-2);
+}
+.kbt-head h3 {
+  margin: 0;
+  font-size: var(--font-ui-large);
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+}
+.kbt-ver {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* ---- 标签行：三个标签 + 右端「日志 / 关于」 ---- */
+.kbt-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-2);
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin: var(--size-2-2) 0 var(--size-4-2);
+  overflow-x: auto;
+}
+.kbt-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-2-1);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  padding: var(--size-4-1) var(--size-4-3);
+  cursor: var(--cursor);
+  white-space: nowrap;
+}
+.kbt-tab:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.kbt-tab.is-active {
+  color: var(--text-accent);
+  font-weight: var(--font-medium);
+  border-bottom-color: var(--interactive-accent);
+  background: var(--background-secondary);
+}
+.kbt-tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-l);
+  background: var(--text-faint);
+  opacity: .75;
+}
+.kbt-dot-mint .kbt-tab-dot { background: var(--color-green); }
+.kbt-dot-cream .kbt-tab-dot { background: var(--color-yellow); }
+.kbt-dot-taro .kbt-tab-dot { background: var(--color-purple); }
+.kbt-tab.is-off .kbt-tab-dot { background: var(--text-faint); opacity: .45; }
+/* 右端两个轻入口：无边框、悬停才浮出底色 */
+.kbt-ghost-btns {
+  margin-left: auto;
+  display: flex;
+  gap: var(--size-2-1);
+  padding-left: var(--size-4-2);
+}
+.kbt-ghost-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  padding: 6px 10px;
+  border-radius: var(--radius-s);
+  cursor: var(--cursor);
+}
+.kbt-ghost-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+/* 切标签只切显示，不写 hidden（hidden 留给搜索过滤） */
+.kbt-hidden { display: none; }
+
+/* ---- 搜索框：整行，无标题行 ---- */
+.kbt-search { display: block; margin: 14px 0 4px; }
+.kbt-search-input {
+  width: 100%;
+  padding: var(--size-4-1) var(--size-4-2);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+.kbt-search-input:focus {
+  border-color: var(--interactive-accent);
+  outline: none;
+  box-shadow: none;
+}
+.kbt-search-input::placeholder { color: var(--text-faint); }
+/* 搜索提示条：淡黄底（color-mix 前留一行主题色兜底） */
+.kbt-search-empty {
+  margin: 10px 0 0;
+  padding: var(--size-4-1) var(--size-4-2);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  background: color-mix(in srgb, var(--color-yellow) 22%, var(--background-primary));
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.5;
+}
+.kbt-search-empty[hidden] { display: none; }
+.kbt-hint-link {
+  border: none;
+  background: transparent;
+  color: var(--text-accent);
+  font-size: inherit;
+  padding: 0 2px;
+  margin: 0 2px;
+  text-decoration: underline;
+  cursor: var(--cursor);
+}
+
+/* ---- 模块分组：不再套外框，只在上一个模块下留一条分隔 ---- */
+.kbt-group { border: none; background: transparent; padding: 0; margin-top: 0; }
+.kbt-group + .kbt-group {
+  margin-top: var(--size-4-3);
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: var(--size-4-2);
+}
+.kbt-group > .setting-item-description {
+  margin: 0 0 var(--size-2-2) 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+/* ---- 模块头下的短横（左边一小条） ---- */
+.kbt-rule {
+  width: 26px;
+  height: 2px;
+  border-radius: var(--radius-s);
+  background: var(--color-purple);
+  opacity: .55;
+  margin: 9px 0 10px 2px;
+}
+
+/* ---- 开关改滑动长条（boss：不要打勾形式） ---- */
+.kbt-switch { align-items: center; }
+.kbt-switch .setting-item-name { font-weight: var(--font-medium); }
+.kbt-switch .checkbox-container {
+  width: 38px;
+  height: 21px;
+  border-radius: var(--radius-l);
+  background: var(--background-modifier-border);
+  border: none;
+  box-shadow: none;
+  position: relative;
+  transition: background-color .18s ease;
+}
+.kbt-switch .checkbox-container::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: var(--radius-l);
+  background: var(--background-primary);
+  transition: transform .18s ease, background-color .18s ease;
+}
+.kbt-switch .checkbox-container.is-enabled { background: var(--interactive-accent); opacity: .82; }
+.kbt-switch .checkbox-container.is-enabled::after {
+  transform: translateX(17px);
+  background: var(--text-on-accent);
+}
+/* 兜底：有的主题不加 is-enabled，直接按 input 的勾选态来 */
+.kbt-switch .checkbox-container:has(input:checked) { background: var(--interactive-accent); }
+.kbt-switch .checkbox-container:has(input:checked)::after { transform: translateX(17px); }
+
+/* ---- ⓘ 小圆钮：悬停（桌面）/ 点击开本页帮助小窗 ---- */
+.kbt-info {
+  width: 17px;
+  height: 17px;
+  min-width: 17px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-l);
+  background: var(--background-primary);
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  line-height: 1;
+  font-style: normal;
+  cursor: help;
+  position: relative;
+  flex: none;
+}
+.kbt-info:hover { color: var(--text-normal); border-color: var(--background-modifier-border-hover); }
+.kbt-info::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: 24px;
+  right: -6px;
+  z-index: 30;
+  width: max-content;
+  max-width: 250px;
+  padding: var(--size-4-1) var(--size-4-2);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary-alt);
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
+  box-shadow: var(--shadow-s);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .12s ease;
+}
+.kbt-info:hover::after { opacity: 1; visibility: visible; }
+/* 手机端没有悬停 —— 提示统一走帮助小窗，不叠一层浮层 */
+@media (hover: none) { .kbt-info::after { display: none; } }
+
+/* ---- 状态行：素色（无 callout 背景），主行 + ⓘ 同一行 / 副行小字 ---- */
+.kbt-status.callout {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0 0 var(--size-4-2);
+  font-size: var(--font-ui-small);
+}
+.kbt-status .kbt-status-top {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-2);
+}
+.kbt-status .kbt-status-main {
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+}
+.kbt-status .kbt-status-sub {
+  margin-top: var(--size-2-1);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.5;
+}
+.kbt-status .kbt-status-sub:empty { display: none; margin: 0; }
+.kbt-inline-btn {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  padding: var(--size-2-1) var(--size-4-2);
+  cursor: var(--cursor);
+}
+.kbt-inline-btn:hover { background: var(--background-modifier-hover); }
+
+/* ---- 栏目：卡片外一个小标签 + 卡片本体（卡片 = 次级底色，行间一条淡分隔线） ---- */
+.kbt-sec { margin: var(--size-4-3) 0 0; }
+.kbt-sec > .kbt-lb {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  margin: 0 0 6px 2px;
+}
+.kbt-card {
+  border: none;
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  padding: 2px 14px;
+}
+.kbt-card .setting-item {
+  border-top: none;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding: 12px 0;
+}
+.kbt-card .setting-item:last-child { border-bottom: none; }
+.kbt-card .setting-item-name { font-weight: var(--font-medium); }
+.kbt-card .setting-item-description { font-size: var(--font-ui-smaller); }
+.kbt-card h5 {
+  margin: var(--size-4-2) 0 var(--size-2-2);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
+}
+.kbt-card > p.setting-item-description:first-child { margin: var(--size-2-2) 0 0; }
+
+/* ---- 按钮：低饱和淡底（color-mix 上一行留主题色兜底，老版本退回素底） ---- */
+.kbt-card button:not(.mod-cta):not(.mod-warning):not(.kbt-inline-btn):not(.kbt-hint-link):not(.kbt-info) {
+  background: var(--background-primary);
+  box-shadow: none;
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+.kbt-group .mod-cta,
+.kbt-card .mod-cta {
+  background: var(--background-secondary);
+  background: color-mix(in srgb, var(--color-purple) 26%, var(--background-primary));
+  box-shadow: none;
+  border: 1px solid var(--background-modifier-border);
+  border-color: color-mix(in srgb, var(--color-purple) 42%, var(--background-primary));
+  color: var(--text-accent);
+}
+.kbt-group .mod-warning,
+.kbt-card .mod-warning,
+.kb-legacy-banner .mod-warning {
+  background: var(--background-secondary);
+  background: color-mix(in srgb, var(--color-red) 22%, var(--background-primary));
+  box-shadow: none;
+  border: 1px solid var(--background-modifier-border);
+  border-color: color-mix(in srgb, var(--color-red) 36%, var(--background-primary));
+  color: var(--text-error);
+}
+.kbt-group .mod-cta:hover,
+.kbt-card .mod-cta:hover,
+.kbt-group .mod-warning:hover,
+.kbt-card .mod-warning:hover { background: var(--background-modifier-hover); }
+
+/* ---- 「高级」折叠组：summary 只有「高级」两字，箭头交给 CSS ---- */
+.kbt-adv { margin: 14px 0 0; }
+.kbt-adv > summary {
+  cursor: var(--cursor);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  padding: 6px 2px;
+  list-style: none;
+}
+.kbt-adv > summary::before { content: "› "; color: var(--text-faint); }
+.kbt-adv[open] > summary { color: var(--text-normal); }
+.kbt-adv[open] > summary::before { content: "⌄ "; }
+.kbt-adv > .kbt-card { margin-top: 6px; }
+.kbt-adv > .setting-item-description {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+/* ---- 帮助（每页一栏 + 悬浮小窗） ---- */
+.kbt-help-row .setting-item-description { color: var(--text-faint); }
+/* 模块关着时整段置灰，但辅助栏与帮助栏必须还能点 */
+.kb-module-disabled .kbt-help-row { pointer-events: auto; opacity: 1; }
+.kb-module-disabled .kbt-sec.is-aux { pointer-events: auto; opacity: 1; }
+
+/* ---- 悬浮小窗（帮助 / 关于）：可上下滑动；条目一行一条 ---- */
+.kbt-pop {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kbt-pop[hidden] { display: none; }
+.kbt-pop-mask {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--background-modifier-cover);
+}
+.kbt-pop-win {
+  position: relative;
+  width: min(460px, 92vw);
+  max-height: min(70vh, 480px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+  overflow: hidden;
+}
+.kbt-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+  padding: var(--size-4-2) var(--size-4-3);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.kbt-pop-title {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+  color: var(--text-normal);
+}
+.kbt-pop-x {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-ui-medium);
+  line-height: 1;
+  padding: var(--size-2-1) var(--size-2-2);
+  border-radius: var(--radius-s);
+  cursor: var(--cursor);
+}
+.kbt-pop-x:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.kbt-pop-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: var(--size-4-2) var(--size-4-3);
+}
+/* 一条 = 键（粗）+ 说明（灰），同一行对齐（效果图 .hrow） */
+.kbt-help-item { padding: var(--size-2-1) 0; }
+.kbt-hrow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--size-4-2);
+  font-size: var(--font-ui-smaller);
+}
+.kbt-help-title {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium);
+  color: var(--text-normal);
+  margin-bottom: 0;
+}
+.kbt-hk { flex: none; }
+.kbt-help-text {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+.kbt-hv { flex: 1 1 auto; }
+.kbt-help-sep {
+  height: 1px;
+  background: var(--background-modifier-border);
+  margin: var(--size-2-1) 0;
+}
+
+/* ---- 手机端 / 窄窗：触控目标放大、按钮换行、小窗铺满 ---- */
+@media (max-width: 700px) {
+  .kbt-head { align-items: flex-start; flex-wrap: wrap; }
+  .kbt-tabs { gap: var(--size-2-1); }
+  .kbt-tab { padding: var(--size-2-2) var(--size-4-2); font-size: var(--font-ui-small); }
+  .kbt-group { padding: 0; }
+  .kbt-card { padding: 2px var(--size-4-2); }
+  .kbt-ghost-btn { min-height: 34px; }
+  .kbt-card button { min-height: 36px; }
+  .kbt-switch .checkbox-container { width: 40px; height: 24px; }
+  .kbt-switch .checkbox-container::after { width: 18px; height: 18px; top: 3px; left: 3px; }
+  .kbt-switch .checkbox-container.is-enabled::after { transform: translateX(16px); }
+  .kbt-switch .checkbox-container:has(input:checked)::after { transform: translateX(16px); }
+  .kbt-info { width: 22px; height: 22px; min-width: 22px; font-size: var(--font-ui-small); }
+  .kbt-pop-win { width: 94vw; max-height: 76vh; }
+  .kbt-pop-body { padding: var(--size-4-2); }
+  /* 窄窗里「键 + 说明」改成两行，避免说明被挤成一条 */
+  .kbt-hrow { display: block; }
+  .kbt-hk { display: block; margin-bottom: 2px; }
+}
+/* Obsidian 移动端（body.is-mobile）：触控尺寸再放宽一点 */
+.is-mobile .kbt-switch .checkbox-container { width: 42px; height: 26px; }
+.is-mobile .kbt-switch .checkbox-container::after { width: 20px; height: 20px; top: 3px; left: 3px; }
+.is-mobile .kbt-switch .checkbox-container.is-enabled::after { transform: translateX(16px); }
+.is-mobile .kbt-switch .checkbox-container:has(input:checked)::after { transform: translateX(16px); }
+.is-mobile .kbt-info { width: 24px; height: 24px; min-width: 24px; }
+.is-mobile .kbt-tab { padding: var(--size-2-2) var(--size-4-2); }
+.is-mobile .kbt-pop-win { width: 96vw; max-height: 80vh; }

@@ -1,0 +1,41 @@
+filters:
+  and:
+    - file.inFolder("01_新知识库")
+views:
+  - type: creation-board
+    name: ①创作看板
+    filters:
+      and:
+        - file.inFolder("01_新知识库")
+        - not:
+            - file.inFolder("01_新知识库/99_Meta")
+    卡片最小宽度: 240
+    允许重复: true
+    板块:
+      - 名称: 内容创作
+        数据源: folder
+        路径: 01_新知识库/02_Areas/内容创作
+        递归深度: 1
+        上限: 50
+      - 名称: 收件箱
+        数据源: folder
+        路径: 01_新知识库/00_Inbox
+        递归深度: 1
+        上限: 50
+    只读: false
+    显正文: true
+  - type: note-stream
+    name: ②笔记内容流
+    filters:
+      and:
+        - file.inFolder("01_新知识库")
+        - not:
+            - file.inFolder("01_新知识库/99_Meta")
+    order:
+      - file.name
+      - 状态
+      - 文件位置
+    sort:
+      - property: file.mtime
+        direction: DESC
+newItemFolder: 01_新知识库/00_Inbox
