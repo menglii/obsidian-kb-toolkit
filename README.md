@@ -232,6 +232,9 @@ git commit -m "..." && git push
 - **远端只走 SSH**（`git@github.com:...`）：本机 HTTPS 走代理会被 502，`gh` CLI 也没装。
 - 本机全局 `core.autocrlf=true` → `.gitattributes` 里 `* text=auto eol=lf` 压住它，否则签出时全部源码被静默改写成 CRLF。新增由脚本以 CRLF 生成的文件时，记得补一条 `-text`。
 
+> 跑完全套测试后 `samples/_sample_manifest.json` 的 `generated` 时间戳会被刷新（`run_r5` 会重算示例库）。
+> 内容其余部分是确定的 —— 提交前 `git checkout -- samples/_sample_manifest.json` 忽略这次 churn 即可。
+
 ## 目录结构
 
 ```
