@@ -3480,6 +3480,12 @@ class CreationBoardView extends BasesViewBase {
      * 面板只分三段 —— 「看板行为 / 板块 / 高级」。开关一律原生胶囊
      * （.cb-opt .checkbox-container，样式见 styles_src/cb.css），
      * 所有解释性文字降级成 title 悬浮提示，面板正文里不铺小字。 */
+    /* R21（boss 拍板「先做视图级」）：「卡片最小宽度」「空位铺满整行」从 Base 的
+     * 视图选项面板挪到这儿、并成一行 —— 原生视图选项面板一条 descriptor 只占一行，
+     * 合不成「文件宽度 [拉杆] 240 px  自动 [开关]」。键与语义一个没变（K_WIDTH / K_FILL）。 */
+    const cardBox = this.addGroup("卡片");
+    this.addWidthRow(cardBox);
+
     const behBox = this.addGroup("看板行为");
     this.addToggle(behBox, K_DUP, true, "允许重复", "一条笔记可以同时出现在多个板块里");
     this.addToggle(
@@ -3536,6 +3542,73 @@ class CreationBoardView extends BasesViewBase {
     const grp = this.panelBodyEl.createDiv({ cls: "cb-grp" });
     grp.createDiv({ cls: "cb-grp-lb", text: label });
     return grp.createDiv({ cls: "cb-grp-body" });
+  }
+
+  /** R21：一行搞定宽度 —— 「文件宽度 [拉杆] 240 px  自动 [开关]」。
+   *  · 拉杆 = K_WIDTH（160–480，step 10）；拖动中只直写 CSS 变量（不重绘、不动 DOM 树）
+   *  · 「自动」= 原「空位铺满整行」K_FILL：开 = 卡片铺满整行、拉杆置灰；关 = 固定为拉杆宽度
+   *  开关样式复用 .cb-opt 那套原生胶囊（见 styles_src/cb.css 的 .cb-wrow 段）。 */
+  addWidthRow(parent) {
+    const row = parent.createDiv({ cls: "cb-wrow" });
+    row.createSpan({ cls: "cb-wlb", text: "文件宽度" });
+
+    const rg = row.createEl("input", { cls: "cb-wrange", type: "range" });
+    rg.setAttr("min", "160");
+    rg.setAttr("max", "480");
+    rg.setAttr("step", "10");
+    rg.value = String(this.optNum(K_WIDTH, 240));
+    rg.setAttr("title", "卡片最小宽度（160 – 480 px）");
+    const val = row.createSpan({ cls: "cb-wval", text: rg.value + " px" });
+
+    /* 「自动」：缩成一个词 + 一个胶囊开关，跟拉杆同一行 */
+    const auto = row.createSpan({ cls: "cb-wauto" });
+    const alb = auto.createEl("label", { cls: "cb-wauto-lb", text: "自动" });
+    const sw = auto.createEl("label", { cls: "checkbox-container" });
+    const ib = sw.createEl("input", { cls: "cb-opt-box", type: "checkbox" });
+    ib.checked = this.optBool(K_FILL, true);
+    sw.setAttr("title", "自动：卡片铺满整行（关 = 固定为拉杆宽度，排不下才换行）");
+
+    /* ⚠️ rg.value 永远是**字符串** —— 上面那个 num() 只认 typeof === "number"，
+     * 直接喂会恒回 dflt（r20b 真 DOM 冒烟抓到的真 bug：拖动预览 / 百分比 / 松手落盘
+     * 全被钉死在 240）。这里照 optNum 的写法：parseFloat + isFinite 兜底。 */
+    const wnum = (s) => { const n = parseFloat(s); return isFinite(n) ? n : 240; };
+    const pctOf = (v) => (((wnum(v) - 160) / 320) * 100).toFixed(1) + "%";
+    const paint = () => {
+      const on = this.optBool(K_FILL, true);
+      rg.disabled = on;                       /* 铺满时宽度拉杆不生效 —— 置灰，别做假控件 */
+      val.style.opacity = on ? "0.4" : "1";
+      rg.style.setProperty("--cb-wpct", pctOf(rg.value));
+      val.setText(rg.value + " px");
+    };
+
+    rg.addEventListener("input", () => {
+      val.setText(rg.value + " px");
+      rg.style.setProperty("--cb-wpct", pctOf(rg.value));
+      /* 拖动中即时生效：只直写 CSS 变量（同 r15 编辑器保护思路：不动 DOM 树）
+       * 「自动」关着时 minmax(w, max) 的 max 也得同步 —— 否则只写 min，往上拖会被
+       * minmax 钳在旧 max（表现为只能缩小、不能放大）。 */
+      const wpx = wnum(rg.value) + "px";
+      this.rootEl.style.setProperty("--cb-card-w", wpx);
+      if (!this.optBool(K_FILL, true)) this.rootEl.style.setProperty("--cb-card-max", wpx);
+    });
+    rg.addEventListener("change", () => {
+      const n = Math.max(160, Math.min(480, Math.round(wnum(rg.value) / 10) * 10));
+      this.cfgSet(K_WIDTH, n);
+      this.repaint(false);
+    });
+
+    const apply = (v) => {
+      this.cfgSet(K_FILL, v);
+      this.repaint(false);
+    };
+    ib.addEventListener("change", () => apply(!!ib.checked));
+    alb.addEventListener("click", () => {
+      ib.checked = !ib.checked;
+      apply(!!ib.checked);
+    });
+
+    paint();
+    return row;
   }
 
   renderIoBox(parent) {
@@ -4130,14 +4203,14 @@ class CreationBoardView extends BasesViewBase {
       }
     };
     return [
-      { displayName: "卡片最小宽度", type: "slider", key: K_WIDTH, min: 160, max: 480, step: 10, default: 240, instant: true },
-      { displayName: "空位铺满整行（关 = 卡片固定为滑杆宽度，一行排不下才换行）", type: "toggle", key: K_FILL, default: true },
       { displayName: "显示属性（逗号分隔；留空 = 每篇前言前 5 个）", type: "text", key: K_PROPS, default: "", placeholder: "简介, 平台, 状态" },
       { displayName: "显正文（板块没单独指定时的默认）", type: "toggle", key: K_BODY, default: false },
       { displayName: "正文字数上限（0 = 不截断，正文区自己滚）", type: "number", key: K_CHARS, min: 0, max: 50000, step: 50, default: DEFAULT_CHARS, instant: true, shouldHide: () => !readBool(K_BODY) },
       { displayName: "属性默认展开（卡片与就地编辑浮层里的属性区）", type: "toggle", key: K_PROS_OPEN, default: true },
-      /* R20：以上 6 项是「显示外观」。只读 / 允许重复 / 显示收容所 / 排除目录 / 总条数上限
-       * 已移出本面板 —— 在顶栏「板块」里改（同一份 .base 配置，键名一个没变）。 */
+      /* R20：以上是「显示外观」。只读 / 允许重复 / 显示收容所 / 排除目录 / 总条数上限
+       * 已移出本面板 —— 在顶栏「板块」里改（同一份 .base 配置，键名一个没变）。
+       * R21：卡片最小宽度 + 空位铺满整行（K_WIDTH / K_FILL）也移走了 —— 顶栏「卡片」组里
+       * 合成一行「文件宽度 [拉杆] 240 px 自动 [开关]」（原生面板一条只占一行，合不成）。 */
     ];
   }
 }
@@ -7611,8 +7684,7 @@ KB.define("core/settingTab", function () {
       { k: "创作看板", v: "视图类型 creation-board；配置存在 .base 的视图块里，跟着文件走" },
       { k: "内容流视图", v: "视图类型 note-stream；懒加载正文预览，长库也不卡" },
       { k: "排除目录", v: "按目录段匹配；留空 = 看板展示整个笔记库" },
-      { k: "卡片宽度", v: "160 – 480 px。每个看板视图各存一份，在笔记里打开看板、从视图右上角 ⚙ 调整" },
-      { k: "空位铺满整行", v: "开 = 空位撑满一行；关 = 卡片固定为滑杆宽度，排不下才换行（同样在视图 ⚙ 里）" }
+      { k: "文件宽度 / 自动", v: "看板顶栏齿轮 → 「卡片」组：拉杆 160 – 480 px；「自动」开 = 卡片铺满整行（拉杆置灰）。每个看板视图各存一份" }
     ]
   };
 
@@ -8519,13 +8591,14 @@ KB.define("core/settingTab", function () {
       });
     tab.boardDesc(boardSetting);
 
-    /* R18：看板显示项（卡片宽度 / 空位铺满整行）在**每个视图自己的 ⚙** 里 ——
-     * 它们是视图级配置（存在 .base 的视图块里，跟着笔记走）。这里只放一条指路，不放全局开关：
-     * 放全局会把用户为每个看板单独调好的值一把压平。 */
+    /* R18：看板显示项是**视图级配置**（存在 .base 的视图块里，跟着笔记走）。这里只放一条
+     * 指路，不放全局开关 —— 放全局会把用户为每个看板单独调好的值一把压平。
+     * R21：「卡片宽度」「空位铺满整行」（后者现已缩成「自动」）从 Base 的视图选项面板
+     * 挪进了**看板顶栏齿轮 → 「卡片」组**（那边才合成得了一行）。 */
     var adv3 = makeAdv(containerEl);
     new obsidian.Setting(adv3)
-      .setName("卡片宽度 / 空位铺满整行")
-      .setDesc("在笔记里打开看板 → 视图右上角 ⚙ 里调，每个看板各存一份");
+      .setName("文件宽度 / 自动")
+      .setDesc("在笔记里打开看板 → 顶栏齿轮 → 「卡片」组里调，每个看板各存一份");
 
     /* R18：帮助（一栏 + 悬浮小窗） */
     helpPop("base");

@@ -1,6 +1,8 @@
 /* kb-toolkit R15 断言：①卡片宽度真可调 ②bug 排查修复 15 处。
  *   A. 宽度可调 —— 「空位铺满整行」开关（默认开 = R14 行为；关 = 固定滑杆宽度）
  *      / 滑杆范围放宽到 480 / 编辑器开着时宽度变更仍生效 / 配置搬运带上新键
+ *      ⚠️ R21 起：滑杆与开关**并成一行**搬进看板顶栏齿轮的「卡片」组（原生视图选项面板
+ *      一条 descriptor 只能占一行，合不成）—— 键与语义一个没变，A2/A3 按新落点重写。
  *   B. vendor 修复 —— 拖动搬文件同目录 ReferenceError / 公式分组手动顺序键同源
  *      / 输入框开着不重绘 / lastDraggedPath 用完即清 / 锚点记板块名 / 还原预览带 sourcePath
  *      / detach 前先保存 / reveal 定时器可清 / 配置搬运补 K_PROS_OPEN / 围栏分开数
@@ -33,9 +35,14 @@ const cbCss = fs.readFileSync(path.join(PLUG, "styles_src", "cb.css"), "utf8");
 /* ================= A. 卡片宽度可调 ================= */
 {
   ok(cb.indexOf('const K_FILL = "空位铺满整行"') >= 0, "A1：新视图选项键 K_FILL「空位铺满整行」");
-  ok(/K_WIDTH, min:\s*160,\s*max:\s*480,\s*step:\s*10/.test(cb), "A2：宽度滑杆范围 160–480（原 360 放宽）");
-  ok(cb.indexOf('{ displayName: "空位铺满整行', ) >= 0 && /type:\s*"toggle",\s*key:\s*K_FILL,\s*default:\s*true/.test(cb),
-    "A3：选项描述里有 K_FILL toggle（默认开 = R14 行为）");
+  /* R21：滑杆与开关并成一行搬进顶栏「卡片」组 —— 范围 / 语义不变，只是换了台面 */
+  ok(cb.indexOf('rg.setAttr("min", "160")') >= 0 && cb.indexOf('rg.setAttr("max", "480")') >= 0
+    && cb.indexOf('rg.setAttr("step", "10")') >= 0,
+    "A2：宽度拉杆范围 160–480 step 10（原 360 放宽；R21 起在顶栏「卡片」组一行里）");
+  ok(cb.indexOf('cls: "cb-wauto-lb", text: "自动"') >= 0
+    && /ib\.checked = this\.optBool\(K_FILL, true\)/.test(cb)
+    && cb.indexOf("this.cfgSet(K_FILL, v)") >= 0,
+    "A3：「空位铺满整行」缩成「自动」+ 胶囊开关，与拉杆同一行（默认开 = R14 行为）");
   ok((cb.match(/--cb-card-max/g) || []).length >= 2
     && (cb.match(/\? "1fr" : minW \+ "px"/g) || []).length >= 2,
     "A4：渲染与编辑器保护两条路都写 --cb-card-max（1fr / 滑杆宽度）");

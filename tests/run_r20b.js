@@ -2,6 +2,8 @@
  *   （vendor/creation-board.js 经 build 内嵌进 main.js，KB.modules.CreationBoardPlugin）
  * 目的：run_r20 的看板断言是**源码级正则**，抓不到「改完当场抛异常」这类运行时错。
  *   这里把视图真造出来，把顶栏齿轮 / 板块设置面板 / 板块编辑行真渲染一遍并点击。
+ * R21 追加：「卡片」组那一行「文件宽度 [拉杆] ＋ 自动 [开关]」也真渲染真点
+ *   （拨开关 / 推拉杆 → 验 config 写回 + 面板不崩 + 拉杆置灰解除）。
  * 只读：不写任何笔记、不落盘。 */
 "use strict";
 const fs = require("fs");
@@ -134,11 +136,46 @@ function makeConfig(obj) {
   click(gearBtn);
   ok(v.panelOpen && !v.panelEl.hasClass("is-hidden"), "点齿轮 → 面板打开");
   const kids = [...v.panelBodyEl.children];
-  eq(kids.length, 3, "面板正文正好 3 段（看板行为 / 板块 / 高级）");
+  eq(kids.length, 4, "面板正文正好 4 段（卡片 / 看板行为 / 板块 / 高级）");
   const grpLabels = [...v.panelBodyEl.querySelectorAll(".cb-grp > .cb-grp-lb")].map(e => e.textContent);
-  eq(grpLabels.join(","), "看板行为,板块", "前两段的段落名（高级那段是 <details>，不带小标签）");
-  eq(kids[2].tagName, "DETAILS", "第三段是 <details>（高级，默认折叠）");
-  eq(kids[2].querySelector("summary").textContent, "高级", "高级组 summary 只留「高级」两字");
+  eq(grpLabels.join(","), "卡片,看板行为,板块", "前三段的段落名（高级那段是 <details>，不带小标签）");
+  eq(kids[3].tagName, "DETAILS", "第四段是 <details>（高级，默认折叠）");
+  eq(kids[3].querySelector("summary").textContent, "高级", "高级组 summary 只留「高级」两字");
+
+  /* ---------- ②' R21：宽度 + 自动并成一行（真 DOM，源码正则抓不到抛异常） ---------- */
+  head("R21 · 「卡片」组：文件宽度 [拉杆] ＋ 自动 [开关] 一行");
+  const cardGrp = kids[0];
+  ok(cardGrp.hasClass("cb-grp"), "第一段就是「卡片」组");
+  const wrow = cardGrp.querySelector(".cb-grp-body > .cb-wrow");
+  ok(!!wrow, "组里就是一行 .cb-wrow");
+  const wrange = wrow && wrow.querySelector("input.cb-wrange");
+  const wautoSw = wrow && wrow.querySelector(".cb-wauto .checkbox-container");
+  ok(!!wrange && !!wautoSw, "拉杆与「自动」开关落在**同一行**里（原生视图选项面板做不到）");
+  eq(wrow && wrow.querySelector(".cb-wlb").textContent, "文件宽度", "行首标签 = 文件宽度");
+  eq(wrange && wrange.getAttribute("type"), "range", "宽控件是 range 拉杆");
+  eq(wrange && [wrange.getAttribute("min"), wrange.getAttribute("max"), wrange.getAttribute("step")].join("/"),
+    "160/480/10", "拉杆范围 160–480 step 10（原 360 放宽）");
+  eq(wrow && wrow.querySelector(".cb-wauto-lb").textContent, "自动", "开关标签就两个字：自动");
+  const wautoBox = wrow && wrow.querySelector(".cb-wauto input.cb-opt-box");
+  ok(wautoBox && wautoBox.checked === true, "「自动」默认开（＝R14 铺满整行行为）");
+  ok(wrange && wrange.disabled === true, "自动开着 → 拉杆置灰（不做假控件）");
+  eq(wrow && wrow.querySelector(".cb-wval").textContent, "240 px", "数值回显跟着拉杆（默认 240 px）");
+
+  /* 关「自动」→ 真写回 config；键名一个没改，.base 老配置照认 */
+  wautoBox.checked = false;
+  fire(wautoBox, "change");
+  ok(SAVES.some(s => s.key === "空位铺满整行" && s.val === false),
+    "关「自动」→ 写回「空位铺满整行」= false（键名不变）");
+  eq(v.cfgGet("空位铺满整行", true), false, "config 读回 false（不是只改了 DOM）");
+
+  /* 拉杆松手 → 写回「卡片最小宽度」，且此刻拉杆已解除置灰 */
+  const wr2 = v.panelEl.querySelector(".cb-wrow input.cb-wrange");
+  ok(!!wr2 && wr2.disabled === false, "重绘后拉杆可用（「自动」关掉 → 置灰解除）");
+  wr2.value = "360";
+  fire(wr2, "change");
+  ok(SAVES.some(s => s.key === "卡片最小宽度" && s.val === 360),
+    "拉杆松手 → 写回「卡片最小宽度」= 360（键名不变，.base 老配置照认）");
+  ok(v.panelOpen && !v.panelEl.hasClass("is-hidden"), "两次重绘后面板都还开着（没被自己关掉）");
 
   const behSwitches = [...v.panelBodyEl.querySelectorAll(".cb-grp-body > .cb-opt")];
   eq(behSwitches.length, 4, "「看板行为」段 4 个开关");
@@ -168,7 +205,7 @@ function makeConfig(obj) {
   eq(secRows.map(r => r.querySelector(".cb-row-name").textContent).join(","), "收件箱,收容所", "行名 = 板块名");
   eq(v.panelBodyEl.querySelector(".cb-add-wrap .cb-add-btn").textContent, "＋ 添加", "添加按钮文案极简");
 
-  const adv = kids[2];
+  const adv = kids[3];
   eq(adv.querySelectorAll(".cb-opt-row > .cb-opt").length, 3, "高级组里 3 个开关（YAML / 双链 / 拖动搬文件）");
   ok(!!adv.querySelector("details.cb-io"), "配置搬运折在高级组里面（默认折叠）");
   ok(/配置搬运/.test(adv.querySelector("details.cb-io summary").textContent), "搬运组 summary 说清做什么");

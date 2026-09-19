@@ -153,8 +153,8 @@ function rowNames(card) {
     const kb = rowNames(advs[0].querySelector(".kbt-card"));
     eq(kb.join(","), "知识库根目录,元数据目录名", "⑤ -4：① 的高级 = 根目录 / 元数据目录名");
     const base = advs[2].querySelector(".kbt-card");
-    ok(/卡片宽度/.test(base.textContent || ""),
-      "⑤ -5：③ 的高级里点明「卡片宽度 / 空位铺满整行」在哪调（视图级选项，不放全局开关）");
+    ok(/文件宽度/.test(base.textContent || "") && /顶栏齿轮/.test(base.textContent || ""),
+      "⑤ -5：③ 的高级里点明「文件宽度 / 自动」在哪调（R21 并成一行 → 顶栏齿轮「卡片」组，视图级，不放全局开关）");
   }
 
   /* ---------- ⑥ 帮助（R20 需求2：入口在顶部标签行，点开仍是悬浮小窗） ---------- */

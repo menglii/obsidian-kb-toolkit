@@ -203,7 +203,7 @@ cd .obsidian/plugins/kb-toolkit
 "$NODE" tests/run_all.js 3        # 全套 22 个套件 × 3 轮
 ```
 
-测试跑的是**构建产物** `main.js`，改过 `src/` 必须先 build。全套断言用 stub obsidian（覆 `Module._load`）+ jsdom，**全离线**，期望值从真实文件/配置动态推算。当前 **1367 断言 / 每轮 0 失败**（`run_all.js 3` → 4101）。其中 `run_r20b.js`（59 条）是**看板真 DOM 冒烟** —— 源码级正则抓不到「改完当场抛异常」，它把内嵌看板真造出来、真点面板与编辑行。
+测试跑的是**构建产物** `main.js`，改过 `src/` 必须先 build。全套断言用 stub obsidian（覆 `Module._load`）+ jsdom，**全离线**，期望值从真实文件/配置动态推算。当前 **1439 断言 / 每轮 0 失败**（`run_all.js 3` → 4317）。其中 `run_r20b.js`（74 条）是**看板真 DOM 冒烟** —— 源码级正则抓不到「改完当场抛异常」，它把内嵌看板真造出来、真点面板与编辑行。
 
 重建的执行/回滚还必须过**真文件沙盒**（真 fs 的 `renameSync`/`rmSync`），以及把真库整棵拷进工作区再演一遍：
 

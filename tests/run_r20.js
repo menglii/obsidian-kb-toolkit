@@ -191,8 +191,14 @@ async function boot(app, modules) {
   {
     const vo = bodyOf(cb, "static getViewOptions(config)");
     ok(vo.length > 0, "D1（需求4-①）：getViewOptions 还是静态方法（Bases 视图选项入口）");
-    ["K_WIDTH", "K_FILL", "K_PROPS", "K_BODY", "K_CHARS", "K_PROS_OPEN"].forEach(k => {
+    ["K_PROPS", "K_BODY", "K_CHARS", "K_PROS_OPEN"].forEach(k => {
       ok(vo.indexOf("key: " + k) >= 0, "D2（需求4-①）：视图配置保留显示类项 " + k);
+    });
+    /* R21：宽度 + 自动也从原生面板挪走了 —— 那边一条 descriptor 只能占一行，
+     * 合不成「文件宽度 [拉杆] 240 px  自动 [开关]」；键一个没删，只是换了台面。 */
+    ["K_WIDTH", "K_FILL"].forEach(k => {
+      ok(vo.indexOf("key: " + k) < 0,
+        "D2b（R21）：" + k + " 已从原生视图选项面板挪进顶栏「卡片」组（一行合得成）");
     });
     ["K_RO", "K_DUP", "K_CATCH", "K_EXCLUDE", "K_CAP"].forEach(k => {
       ok(vo.indexOf(k) < 0, "D3（需求4-①）：行为/范围类项 " + k + " 已从视图配置移走（归顶栏整板设置）");
@@ -209,10 +215,10 @@ async function boot(app, modules) {
   {
     ok(/^  addGroup\(label\) \{/m.test(cb), "E1（需求4-②）：addGroup 分段帮助函数在");
     const rp = bodyOf(cb, "renderPanel() {");
-    eq((rp.match(/this\.addGroup\(/g) || []).length, 2,
-      "E2（需求4-②）：renderPanel 分成「看板行为」「板块」两组（高级第三组走 details）");
-    ok(/this\.addGroup\("看板行为"\)/.test(rp) && /this\.addGroup\("板块"\)/.test(rp),
-      "E3（需求4-②）：段落名就是这两个（极简，不加小字说明）");
+    eq((rp.match(/this\.addGroup\(/g) || []).length, 3,
+      "E2（需求4-②／R21）：renderPanel 分成「卡片」「看板行为」「板块」三组（高级第四组走 details）");
+    ok(/this\.addGroup\("卡片"\)/.test(rp) && /this\.addGroup\("看板行为"\)/.test(rp) && /this\.addGroup\("板块"\)/.test(rp),
+      "E3（需求4-②／R21）：段落名就是这三个（极简，不加小字说明）");
     ok(/advRow\.createEl\("summary", \{ text: "高级" \}\)/.test(rp)
       && /const advBody = advRow\.createDiv\(\{ cls: "cb-opt-row" \}\);/,
       "E4（需求4-②）：高级折叠组 summary 只留「高级」两字");
