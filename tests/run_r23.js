@@ -122,14 +122,23 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
     "D1：propsOpenDefault() 照旧读同一个键、默认 true");
   ok(/const open = dfltOpen \? !this\.prosToggledPaths\.has\(file\.path\) : this\.prosToggledPaths\.has\(file\.path\);/.test(cb),
     "D2：卡片属性区「与默认不同才记」的算法没动");
-  ok(/if \(!this\.editorProps && !this\.propsOpenDefault\(\)\) \{/.test(cb),
-    "D3：就地编辑浮层那段没动");
+  /* R24：这就地编辑浮层也改成「板块级优先」（拿 card.__cbSec，取不到回落视图默认） */
+  ok(/!this\.editorProps && !this\.propsOpenOn\(card \? card\.__cbSec : null\)/.test(cb),
+    "D3（R24）：就地编辑浮层改走 propsOpenOn —— 板块级优先，拿不到才回落视图默认");
   ok(/view\[K_PROS_OPEN\] = this\.optBool\(K_PROS_OPEN, true\);/.test(cb),
     "D4：配置搬运导出照旧带上这个键（换台面不丢配置）");
   ok(/kinds\[K_PROS_OPEN\]\s*=\s*"bool"/.test(cb),
     "D5：配置搬运导入的键型也没变（bool）");
-  ok(cb.indexOf('"属性展开"') < 0,
-    "D6：没有偷偷换键名（面板标签是「属性默认展开」，不是效果图里那个「属性展开」）");
+  /* R24 之后 `"属性展开"` 这个字面量**合法存在**了 —— 但它是**板块级**三态键，
+     跟视图级的 K_PROS_OPEN（"属性默认展开"）是两个键、两层。这里核的就是"别混用"。 */
+  ok(cb.indexOf('triRow("属性展开", "propsOpen"') >= 0,
+    "D6（R24）：`属性展开` 唯一出处 = 板块级三态行（不冒充视图默认）");
+  ok(cb.indexOf('propsOpen: tri(o, "属性展开", "propsOpen")') >= 0
+    && cb.indexOf('o["属性展开"] = sec.propsOpen') >= 0,
+    "D6b（R24）：`属性展开` 只作板块级解析 / 写回，走的是 secs[i] 那一层");
+  ok(cb.indexOf('const K_PROS_OPEN = "属性默认展开"') >= 0
+    && cb.indexOf('"属性默认展开"') >= 0,
+    "D6c（R24）：视图级键名仍是「属性默认展开」，两个键分得开（不混用）");
   ok(mainJs.indexOf("const K_PROS_OPEN = \"属性默认展开\"") >= 0
     && mainJs.indexOf("this.addToggle(behBox, K_PROS_OPEN, true, \"属性默认展开\"") >= 0,
     "D7：main.js 内嵌的看板字节 == vendor 原件（构建已跟上）");

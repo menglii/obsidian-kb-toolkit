@@ -128,7 +128,7 @@ const K_CATCH = "显示收容所";
 const K_WIDTH = "卡片最小宽度";
 const K_FILL = "空位铺满整行";   // R15：默认开（R14 行为，1fr 撑满）；关 = 卡片固定为滑杆宽度
 const K_PROPS = "显示属性";     // 字符串（逗号分隔）；空 → 每篇前言前 5 个用户属性
-const K_PROS_OPEN = "属性默认展开";  // R9 键（卡片 / 就地编辑浮层里的属性区是否默认展开，默认 true）；R23 起控件在顶栏面板「看板行为」组
+const K_PROS_OPEN = "属性默认展开";  // R9 键（卡片 / 就地编辑浮层里的属性区是否默认展开，默认 true）；R23 起控件在顶栏面板「看板行为」组；R24 起**板块可各自覆盖**（右键板块 → 通用设置）
 const K_BODY = "显正文";        // boolean；板块未单独指定时的默认
 const K_CHARS = "正文字数";     // number；正文截断字数
 const K_RO = "只读";            // boolean；关掉全部就地编辑
@@ -139,6 +139,13 @@ const K_SORT = "排序";          // 板块级：卡片排序方式（空 = 沿�
 const K_FOLD = "折叠";          // 对象：{"板块名":true,"板块名/子板块名":true}；只存「收起」的，省体积
 const K_EXCLUDE = "排除目录";    // 字符串（逗号分隔）——按**目录段**匹配，所以写 99_Meta 就够
 const K_CAP = "总条数上限";      // number；0 = 不限
+/* R24（boss 第 3 条·文件操作）：把某篇笔记「收起来」的三件套 —— 都是**视图级**的。
+ * 为什么不做成板块级：一篇笔记属于哪个板块会随数据源变，隐藏状态得跟着**笔记**走，
+ * 挂在某个板块上会「一改数据源就漏出来」。所以这三项在右键菜单里被归到
+ * 「文件操作 · 整个看板」那一组，不冒充板块级。 */
+const K_HIDDEN_ON = "文件隐藏显示";     // boolean；能不能在卡片上收起某篇（默认开）
+const K_HIDDEN_SHOW = "查看隐藏的文件"; // boolean；把收起来的显示出来（淡出、仍可恢复；默认关）
+const K_HIDDEN = "隐藏的文件";          // 数组：被收起来的笔记路径
 
 /* 第 6 轮：正文截断**默认关掉**（0 = 不截断）。
    正文区本来就是「限高 + 自己滚」，截断只会让人看不到全文、还多一行「已截断」提示。
@@ -561,7 +568,8 @@ function gearIcon(parent) {
 /* 板块项的已知键（写回只写这些 + 各类型专属键，其余原样保留 → 不破坏手写的未来字段） */
 const KNOWN_KEYS = ["名称", "name", "数据源", "source", "路径", "path", "标签", "tag",
   "公式", "formula", "上限", "limit", "递归深度", "depth",
-  "属性", "显正文", "显示 YAML", "显示结尾双链", "拖动搬文件", "排序", "sort"];
+  "属性", "显正文", "显示 YAML", "显示结尾双链", "属性展开", "拖动搬文件", "排序", "sort",
+  "propsOpen"];
 
 /** R12：三态字段（true / false / null=继承视图默认）的容错解析 */
 function tri(o, zhKey, enKey) {
@@ -595,6 +603,7 @@ function normalizeSection(raw, i) {
     body,            // null = 继承视图默认；true/false = 本板块显式指定
     yaml: tri(o, "显示 YAML", "yaml"),      // R12：null=继承视图；true=保留 YAML 前言
     links: tri(o, "显示结尾双链", "links"), // R12：null=继承视图；false=掐掉结尾「关联笔记」段
+    propsOpen: tri(o, "属性展开", "propsOpen"), // R24：null=继承视图；true/false = 本板块属性区默认展开/折叠
     sort: str(o[K_SORT] !== undefined ? o[K_SORT] : o.sort),   // "" = 沿用 base 顺序
     extra: {},
   };
@@ -619,6 +628,7 @@ function sectionToRaw(sec) {
   if (sec.body === true || sec.body === false) o["显正文"] = sec.body;
   if (sec.yaml === true || sec.yaml === false) o["显示 YAML"] = sec.yaml;
   if (sec.links === true || sec.links === false) o["显示结尾双链"] = sec.links;
+  if (sec.propsOpen === true || sec.propsOpen === false) o["属性展开"] = sec.propsOpen;
   if (sec.sort) o[K_SORT] = sec.sort;
   const ex = sec.extra || {};
   for (const k of Object.keys(ex)) if (!Object.prototype.hasOwnProperty.call(o, k)) o[k] = ex[k];
@@ -905,6 +915,13 @@ class CreationBoardView extends BasesViewBase {
   propsOpenDefault() {
     return this.optBool(K_PROS_OPEN, true);
   }
+  /** R24（boss 第 0 条「单个板块的设置应只对单独板块生效」）：板块级 `属性展开` 优先，
+   *  没写 → 视图默认。传 null/undefined 时直接回落视图默认（就地编辑浮层会这么调）。 */
+  propsOpenOn(sec) {
+    const c = sec ? this.specOf(sec) : null;
+    if (c && (c.propsOpen === true || c.propsOpen === false)) return c.propsOpen;
+    return this.propsOpenDefault();
+  }
   charsOf(sec) {
     return Math.max(0, Math.floor(this.optNum(K_CHARS, DEFAULT_CHARS)));
   }
@@ -1009,6 +1026,9 @@ class CreationBoardView extends BasesViewBase {
       String(this.optBool(K_RO, false)),
       String(this.cfgGet(K_EXCLUDE, "~")),
       String(this.cfgGet(K_CAP, "~")),
+      String(this.optBool(K_HIDDEN_ON, true)),      /* R24：拨「文件隐藏显示」即时重绘 */
+      String(this.optBool(K_HIDDEN_SHOW, false)),   /* R24：拨「查看隐藏的文件」同理 */
+      String(this.cfgGet(K_HIDDEN, "~")),           /* R24：隐藏 / 取消隐藏某篇 */
       String(this.panelOpen),
       String(this.editIdx),
       String(this.addOpen),
@@ -1536,7 +1556,18 @@ class CreationBoardView extends BasesViewBase {
 
     const head = wrap.createDiv({ cls: "cb-section-head" });
     const tri = head.createSpan({ cls: "cb-tri", text: collapsed ? "▸" : "▾" });
-    head.createSpan({ cls: "cb-section-name", text: sec.name });
+    const nameEl = head.createSpan({ cls: "cb-section-name", text: sec.name });
+    /* R24（boss 第 1 条）：双击板块名 → 就地改名（原来只能去顶栏面板的编辑行里改） */
+    if (this.secConfigurable(sec) && !this.readonly()) {
+      nameEl.addClass("cb-sec-name-edit");
+      nameEl.setAttr("title", "双击改名；拖动这一行可以给板块排序");
+      nameEl.addEventListener("dblclick", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        this.cancelClick();
+        this.beginRenameSection(sec, nameEl);
+      });
+    }
     head.createSpan({ cls: "cb-section-count", text: sec.total + " 条" });
     if (sec.isCatch) head.createSpan({ cls: "cb-badge", text: "收容所" });
     else if (sec.native) head.createSpan({ cls: "cb-badge", text: "自动" });
@@ -1591,21 +1622,15 @@ class CreationBoardView extends BasesViewBase {
         this.secDrag = null;
       });
     }
-    /* R12（boss 第 2 条）：每个板块标题旁的 ⚙ —— 就地打开板块设置面板并定位到这块的编辑行
-       （名称 / 数据源 / 显正文 / 属性 / 显示 YAML / 显示结尾双链 / 排序都在里面） */
-    if (sec.spec && typeof sec.srcIndex === "number" && !sec.native && !sec.isFormulaValue) {
-      const gear = head.createEl("button", { cls: "cb-sec-gear" });
-      gearIcon(gear);
-      gear.setAttr("title", "板块设置：名称 / 数据源 / 显示方式（显正文、属性、显示 YAML、结尾双链、排序）");
-      gear.addEventListener("click", (evt) => {
-        evt.stopPropagation();
-        evt.preventDefault();
-        this.panelOpen = true;
-        this.addOpen = false;
-        this.editIdx = sec.isCatch ? this.secs.length - 1 : sec.srcIndex;
-        this.renderPanel();
-      });
-    }
+    /* R24（boss 第 3 条）：板块标题旁那个 ⚙ **撤掉了** —— 改成「右键板块 → 鼠标处弹设置小窗」
+       （Windows 右键菜单那种）。原来那块齿轮看着更像全局设置（跟顶栏面板各写一份），
+       而且每次都要「开面板 → 找到这块的编辑行」；右键是「就地、只对这块」的语义。
+       双击改名与整行拖动排序都保留（拖动是 R12 就有的，不用重做）。 */
+    head.addEventListener("contextmenu", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      this.openSecMenu(sec, evt.clientX, evt.clientY);
+    });
 
     const body = wrap.createDiv({ cls: "cb-section-body" });
 
@@ -1613,7 +1638,17 @@ class CreationBoardView extends BasesViewBase {
     /* 第 12 轮：板块三角只折「自己这一层的笔记」（老板：收起后别把下面的子栏目一起带走）。
        折叠态落在 grid 上，子板块（.cb-sub）在外面，各自管各自的折叠 */
     if (collapsed) grid.addClass("is-collapsed");
-    for (const e of sec.entries) this.renderCard(grid, e, sec);
+    /* R24（boss 第 3 条·文件操作）：被「收起来」的笔记 —— 「查看隐藏的文件」关着就**完全不渲染**；
+       开着则渲染成淡出、仍可右键恢复（`.cb-card.is-cb-hidden`）。条数上照旧给个「已隐藏 N」。 */
+    let hiddenN = 0;
+    for (const e of sec.entries) {
+      const hid = this.isHidden(e && e.file ? e.file.path : "");
+      if (hid) hiddenN++;
+      if (hid && !this.showHidden()) continue;
+      const cd = this.renderCard(grid, e, sec);
+      if (hid && cd) cd.addClass("is-cb-hidden");
+    }
+    if (hiddenN > 0) head.createSpan({ cls: "cb-badge cb-badge-hidden", text: "已隐藏 " + hiddenN });
 
     if (sec.entries.length === 0 && sec.children.length === 0) {
       body.createDiv({ cls: "cb-hint", text: sec.error ? "（" + sec.error + "）" : "这个板块还没有笔记" });
@@ -1734,7 +1769,7 @@ class CreationBoardView extends BasesViewBase {
       /* 只记「与默认不同」的路径（重渲染不丢）。默认值本身可切换，所以不能只存一份展开集合 ——
          存展开集合的话，「默认展开」时集合为空就永远全展开，用户手收起的会被重渲染吃掉。 */
       if (!this.prosToggledPaths) this.prosToggledPaths = new Set();
-      const dfltOpen = this.propsOpenDefault();
+      const dfltOpen = this.propsOpenOn(sec);
       const open = dfltOpen ? !this.prosToggledPaths.has(file.path) : this.prosToggledPaths.has(file.path);
       propsBox.toggleClass("cb-pros-fold", !open);
       const tg = titleRow.createEl("button", { cls: "cb-pros-toggle", text: open ? "属性 ▾" : "属性 ▸" });
@@ -2071,7 +2106,341 @@ class CreationBoardView extends BasesViewBase {
     this.unbindMenuEsc();
   }
 
+  /* ============================================================
+   * R24（boss：「单个板块的设置应只对单独板块生效」）
+   *   · 板块标题旁的 ⚙ 撤掉 → 右键板块弹「设置小窗」（Windows 右键菜单那种）
+   *   · 板块级项一律**三态**（继承 / 开 / 关）：继承 = 跟视图默认，开/关 = 只改这一块
+   *   · 「文件操作」那三项本质是**整个看板**的，照老板要求放在这张菜单里，
+   *     分组标题上写明「整个看板」，不让它冒充板块级
+   * ============================================================ */
+
+  /** 这个板块能不能「单独设置」—— 自动分组 / 公式产出的子分组不行（名字与顺序都是算出来的） */
+  secConfigurable(sec) {
+    return !!(sec && sec.spec && typeof sec.srcIndex === "number" && !sec.native && !sec.isFormulaValue);
+  }
+
+  /** built section → 它在 `this.secs` 里的下标（catchall 在 persist 时被挪到最后，按 source 找） */
+  secIndexOf(sec) {
+    if (!sec) return -1;
+    if (sec.isCatch) return this.secs.findIndex((s) => s.source === "catchall");
+    if (typeof sec.srcIndex === "number" && sec.srcIndex >= 0) return sec.srcIndex;
+    if (sec.spec) {
+      const i = this.secs.indexOf(sec.spec);
+      if (i >= 0) return i;
+    }
+    return -1;
+  }
+
+  /** 这个板块有没有「板块级覆盖」（决定「重置设置」是否可点） */
+  secHasOverride(i) {
+    const s = this.secs[i];
+    if (!s) return false;
+    return s.body === true || s.body === false
+      || s.yaml === true || s.yaml === false
+      || s.links === true || s.links === false
+      || s.propsOpen === true || s.propsOpen === false
+      || (s.props && s.props.length > 0)
+      || !!s.sort;
+  }
+
+  /** R24（boss 第 3 条·通用设置）：「重置设置」= 把这个板块的**全部板块级覆盖**清掉 → 回继承视图默认 */
+  resetSection(i) {
+    const s = this.secs[i];
+    if (!s) return;
+    s.body = null;
+    s.yaml = null;
+    s.links = null;
+    s.propsOpen = null;
+    s.props = [];
+    s.sort = "";
+    this.saveState = "已重置「" + s.name + "」（回继承视图默认）";
+    this.afterChange();
+  }
+
+  /** R24（boss 第 3 条·菜单第一项）：「刷新」—— 绕开 `computeSig` 那关强制重画并重读当前数据 */
+  refreshBoard() {
+    this.sig = null;
+    this.renderedOnce = false;
+    this.lastPaths = null;
+    this.saveState = "已刷新";
+    try {
+      this.onDataUpdated();
+    } catch (e) {
+      this.repaint(true);
+    }
+  }
+
+  /* ---------- R24（boss 第 3 条·文件操作）：把某篇笔记「收起来」 ---------- */
+  hiddenOn() {
+    return this.optBool(K_HIDDEN_ON, true);
+  }
+  showHidden() {
+    return this.optBool(K_HIDDEN_SHOW, false);
+  }
+  hiddenPaths() {
+    const v = this.cfgGet(K_HIDDEN, null);
+    if (Array.isArray(v)) return v.map(str).filter(Boolean);
+    return parseNameList(v);
+  }
+  isHidden(p) {
+    return !!p && this.hiddenPaths().indexOf(String(p)) >= 0;
+  }
+  toggleHidden(p) {
+    if (!p) return;
+    const cur = this.hiddenPaths();
+    const i = cur.indexOf(String(p));
+    if (i >= 0) cur.splice(i, 1);
+    else cur.push(String(p));
+    this.cfgSet(K_HIDDEN, cur.length ? cur : null);
+    this.repaint(false);
+  }
+
+  closeSecMenu() {
+    if (this.secMenuEl) {
+      try {
+        if (this.secMenuEl.parentNode) this.secMenuEl.parentNode.removeChild(this.secMenuEl);
+      } catch (e) {}
+      this.secMenuEl = null;
+    }
+    this.removeOutsideCloser("secmenu");
+    this.unbindMenuEsc();
+  }
+
+  /** 右键板块 → 鼠标处弹「板块设置」小窗（跟手弹出、clamp 在视口内、点外面 / Esc 收起） */
+  openSecMenu(sec, x, y) {
+    this.closeSecMenu();
+    this.closeCardMenu();
+    const menu = document.body.createDiv({ cls: "cb-ctxmenu cb-secmenu" });
+    this.secMenuEl = menu;
+
+    const si = this.secIndexOf(sec);
+    const canSec = this.secConfigurable(sec) && si >= 0;
+    const secName = sec ? sec.name : "";
+
+    const run = (fn) => {
+      this.closeSecMenu();
+      try { fn(); } catch (e) {}
+    };
+    const item = (label, fn, disabled) => {
+      const el = menu.createDiv({ cls: "cb-ctx-item" + (disabled ? " is-disabled" : "") });
+      el.setAttr("data-act", label);
+      el.setText(label);
+      if (disabled) {
+        el.setAttr("aria-disabled", "true");
+        return el;
+      }
+      el.addEventListener("mousedown", (evt) => evt.stopPropagation());
+      el.addEventListener("click", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        run(fn);
+      });
+      return el;
+    };
+    /** 跟 item 一样，只是**点完不收起小窗** —— 「显示帮助」要就地展开说明，
+      *  收起小窗 = 把刚展开的说明块连人带窗一起摘掉（那就白点了）。 */
+    const itemStay = (label, fn) => {
+      const el = menu.createDiv({ cls: "cb-ctx-item" });
+      el.setAttr("data-act", label);
+      el.setText(label);
+      el.addEventListener("mousedown", (evt) => evt.stopPropagation());
+      el.addEventListener("click", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        try { fn(); } catch (e) {}
+      });
+      return el;
+    };
+    const grp = (label, hint) => {
+      const h = menu.createDiv({ cls: "cb-ctx-head" });
+      h.createSpan({ cls: "cb-ctx-head-lb", text: label });
+      if (hint) h.createSpan({ cls: "cb-ctx-head-hint", text: hint });
+      return h;
+    };
+    /** 板块级三态一行：左标签 + 右「继承 / 开 / 关」（复用面板那套 .cb-seg） */
+    const triRow = (label, field, viewOn, tip) => {
+      const row = menu.createDiv({ cls: "cb-ctx-tri" });
+      row.setAttr("data-field", field);
+      const lb = row.createSpan({ cls: "cb-ctx-tri-lb", text: label });
+      lb.setAttr("title", tip || "");
+      const seg = row.createDiv({ cls: "cb-seg cb-seg-" + field });
+      const cur = this.secs[si][field];
+      const curVal = cur === true ? "true" : cur === false ? "false" : "";
+      const opts = [
+        ["", "继承", "跟随视图默认（现在 = " + (viewOn ? "开" : "关") + "）"],
+        ["true", "开", "这一块一定显示"],
+        ["false", "关", "这一块一定不显示"],
+      ];
+      for (const pair of opts) {
+        const b = seg.createEl("button", { cls: "cb-seg-btn", text: pair[1] });
+        b.setAttr("type", "button");
+        b.setAttr("data-value", pair[0]);
+        b.setAttr("title", pair[2]);
+        if (pair[0] === curVal) b.addClass("is-on");
+        b.addEventListener("mousedown", (evt) => evt.stopPropagation());
+        b.addEventListener("click", (evt) => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          const nv = pair[0] === "" ? null : pair[0] === "true";
+          if (this.secs[si][field] === nv) return;
+          this.secs[si][field] = nv;
+          this.afterChange();
+          this.closeSecMenu();
+        });
+      }
+    };
+    /** 「文件操作」那组是**视图级**的 → 用 Windows 那种打勾项，不用三态（免得冒充板块级） */
+    const chk = (label, key, dflt, tip) => {
+      const el = menu.createDiv({ cls: "cb-ctx-item cb-ctx-chk" });
+      el.setAttr("data-key", key);
+      el.setAttr("title", tip || "");
+      el.createSpan({ cls: "cb-ctx-tick", text: this.optBool(key, dflt) ? "✓" : "" });
+      el.createSpan({ cls: "cb-ctx-chk-lb", text: label });
+      el.addEventListener("mousedown", (evt) => evt.stopPropagation());
+      el.addEventListener("click", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        this.cfgSet(key, !this.optBool(key, dflt));
+        this.repaint(false);
+        this.closeSecMenu();
+      });
+      return el;
+    };
+
+    item("刷新", () => this.refreshBoard());
+    menu.createDiv({ cls: "cb-ctx-sep" });
+
+    if (canSec) {
+      grp("通用设置", "只对「" + secName + "」");
+      triRow("属性展开", "propsOpen", this.propsOpenDefault(), "卡片 / 就地编辑浮层里的属性区默认展开");
+      triRow("内容展开", "body", this.viewBodyDefault(), "＝原来的「显正文」；关 = 只显示标题与属性");
+      const has = this.secHasOverride(si);
+      item(has ? "重置设置" : "重置设置（已是默认）", () => this.resetSection(si), !has);
+      let helpOpen = false;
+      const helpBox = menu.createDiv({ cls: "cb-sec-help" });
+      helpBox.toggleClass("is-hidden", true);
+      itemStay("显示帮助", () => {
+        helpOpen = !helpOpen;
+        helpBox.toggleClass("is-hidden", !helpOpen);
+        helpBox.setText("「" + secName + "」：数据源 " + (sec.spec.source || "") + "，"
+          + "三态项（继承 / 开 / 关）只改这一块；双击板块名可改名，拖动标题可排序；"
+          + "「文件操作」那组是整个看板共用的。");
+      });
+
+      menu.createDiv({ cls: "cb-ctx-sep" });
+      grp("笔记内容", "只对「" + secName + "」");
+      triRow("显示 YAML", "yaml", this.optBool(K_YAML, false), "卡片正文保留笔记前言（frontmatter）");
+      triRow("显示双链", "links", this.optBool(K_LINKS, true), "卡片正文显示结尾「关联笔记」段");
+    } else {
+      menu.createDiv({ cls: "cb-ctx-note", text: sec && sec.native
+        ? "「自动分组」的板块不能单独设置（名字与分组都是看板配置算出来的）"
+        : "这个板块不支持单独设置" });
+    }
+
+    menu.createDiv({ cls: "cb-ctx-sep" });
+    grp("文件操作", "整个看板");
+    chk("拖动搬文件", K_MOVE, true, "跨板块拖动 = 直接搬文件；关 = 需要按住 Alt");
+    chk("文件隐藏显示", K_HIDDEN_ON, true, "允许在卡片上把某篇笔记收起来（卡片右键 → 隐藏这篇）");
+    chk("查看隐藏的文件", K_HIDDEN_SHOW, false, "把收起来的笔记显示出来（淡出，仍可右键恢复）");
+
+    /* 位置：跟手弹出，clamp 在视口内。
+       🔴 尺寸兜底：真浏览器里刚 append 就能读到真 rect（同步布局），走到兜底只在
+       「量出来是 0」的退化情形（比如视图此刻 display:none）。R24 真引擎实测窗高 390.6，
+       原来估 380 会让窗底探出屏 11px → 兜底值抬到 420。 */
+    try {
+      const r = menu.getBoundingClientRect();
+      const w = r.width || 250;
+      const h = r.height || 420;
+      const vw = (typeof window !== "undefined" && window.innerWidth) || 1200;
+      const vh = (typeof window !== "undefined" && window.innerHeight) || 800;
+      menu.style.left = Math.min(Math.max(4, x), Math.max(4, vw - w - 8)) + "px";
+      menu.style.top = Math.min(Math.max(4, y), Math.max(4, vh - h - 8)) + "px";
+    } catch (e) {}
+
+    this.addOutsideCloser(
+      "secmenu",
+      (t) => (menu.contains ? menu.contains(t) : false),
+      () => this.closeSecMenu()
+    );
+    this.menuEscHandler = (e) => {
+      if (e && e.key === "Escape") this.closeSecMenu();
+    };
+    try {
+      document.addEventListener("keydown", this.menuEscHandler, true);
+    } catch (e) {}
+    return menu;
+  }
+
+  /* ============================================================
+   * R24（boss 第 1 条）：双击板块名 → 就地改名
+   *   🔴 坑：`折叠` 状态的键就是**板块名**（`foldKey`）：改名不迁移 = 折叠状态凭空丢。
+   *   手动顺序的键是「数据源:路径/标签」，跟名字无关，不用动。
+   * ============================================================ */
+  beginRenameSection(sec, nameEl) {
+    if (this.readonly() || !nameEl || nameEl.__cbRenaming) return null;
+    const i = this.secIndexOf(sec);
+    if (i < 0) return null;
+    const old = sec.name;
+
+    nameEl.__cbRenaming = true;
+    const input = document.createElement("input");
+    if (input.addClass) input.addClass("cb-sec-rename-input");
+    else input.classList.add("cb-sec-rename-input");
+    input.setAttribute("type", "text");
+    input.value = old;
+    nameEl.setText("");
+    nameEl.appendChild(input);
+
+    let done = false;
+    const finish = (commit) => {
+      if (done) return;
+      done = true;
+      const nv = String(input.value || "").trim();
+      try { input.remove(); } catch (e) {}
+      nameEl.__cbRenaming = false;
+      nameEl.setText(old);
+      if (!commit || !nv || nv === old) return;
+      this.renameSection(i, nv);
+    };
+    input.addEventListener("click", (evt) => evt.stopPropagation());
+    input.addEventListener("dblclick", (evt) => evt.stopPropagation());
+    input.addEventListener("mousedown", (evt) => evt.stopPropagation());
+    input.addEventListener("keydown", (evt) => {
+      evt.stopPropagation();
+      if (evt.key === "Enter") { evt.preventDefault(); finish(true); }
+      else if (evt.key === "Escape") { evt.preventDefault(); finish(false); }
+    });
+    input.addEventListener("blur", () => finish(true));
+    try { input.focus(); if (input.select) input.select(); } catch (e) {}
+    return input;
+  }
+
+  /** 改名 + 把以旧名作键的 `折叠` 状态迁到新名（不迁移 = 改个名折叠全乱） */
+  renameSection(i, nv) {
+    const sec = this.secs[i];
+    if (!sec) return;
+    const old = sec.name;
+    if (old === nv) return;
+    sec.name = nv;
+    try {
+      const raw = this.cfgGet(K_FOLD, null);
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        const next = {};
+        let hit = false;
+        for (const k of Object.keys(raw)) {
+          if (k === old) { next[nv] = raw[k]; hit = true; }
+          else if (k.indexOf(old + "/") === 0) { next[nv + k.slice(old.length)] = raw[k]; hit = true; }
+          else next[k] = raw[k];
+        }
+        if (hit) this.cfgSet(K_FOLD, next);
+      }
+    } catch (e) {}
+    this.saveState = "板块已改名 → " + nv;
+    this.afterChange();
+  }
+
   openCardMenu(card, entry, x, y) {
+    this.closeSecMenu();
     this.closeCardMenu();
     const ro = this.readonly();
     const file = entry.file;
@@ -2114,6 +2483,10 @@ class CreationBoardView extends BasesViewBase {
       this.beginRename(card, entry);
     });
     if (!ro) item("将文件移动到…", () => this.promptMoveTo(entry));
+    /* R24（boss 第 3 条·文件操作）：把这篇「收起来」/ 放出来（只改视图配置，不动笔记本身） */
+    if (this.hiddenOn()) {
+      item(this.isHidden(file.path) ? "取消隐藏" : "隐藏这篇", () => this.toggleHidden(file.path));
+    }
 
     const sys = menu.createDiv({ cls: "cb-ctx-sep" });
     item("使用默认应用打开", () => {
@@ -2806,7 +3179,7 @@ class CreationBoardView extends BasesViewBase {
             原生标题钮**——状态与内部标志同步，之后点标题可正常展开/收起，不吃两下。
             （卡片已显示属性时整块被 cb-hidepros 藏掉，没必要折）。 */
       /* 🔴 R9：属性默认展开 → 这段「替用户折一下」只在把视图选项「属性默认展开」关掉时才跑。 */
-      if (!this.editorProps && !this.propsOpenDefault()) {
+      if (!this.editorProps && !this.propsOpenOn(card ? card.__cbSec : null)) {
         try {
           let tries = 0;
           const foldTimer = setInterval(() => {
@@ -3326,6 +3699,9 @@ class CreationBoardView extends BasesViewBase {
     view[K_PROS_OPEN] = this.optBool(K_PROS_OPEN, true);   /* R15 修：原来配置搬运会丢这一项 */
     view[K_EXCLUDE] = this.cfgGet(K_EXCLUDE, "");
     view[K_CAP] = this.optNum(K_CAP, 0);
+    view[K_HIDDEN_ON] = this.optBool(K_HIDDEN_ON, true);
+    view[K_HIDDEN_SHOW] = this.optBool(K_HIDDEN_SHOW, false);
+    view[K_HIDDEN] = this.hiddenPaths();
     return JSON.stringify({ _版本: 4, 视图: view, 板块: this.secs.map(sectionToRaw) }, null, 2);
   }
 
@@ -3440,6 +3816,7 @@ class CreationBoardView extends BasesViewBase {
       kinds[K_WIDTH] = "num"; kinds[K_DUP] = "bool"; kinds[K_CATCH] = "bool"; kinds[K_PROPS] = "raw";
       kinds[K_BODY] = "bool"; kinds[K_CHARS] = "num"; kinds[K_RO] = "bool";
       kinds[K_EXCLUDE] = "raw"; kinds[K_CAP] = "num"; kinds[K_FILL] = "bool"; kinds[K_PROS_OPEN] = "bool";
+      kinds[K_HIDDEN_ON] = "bool"; kinds[K_HIDDEN_SHOW] = "bool"; kinds[K_HIDDEN] = "raw";
       for (const k of Object.keys(view)) {
         const kind = kinds[k];
         if (!kind) continue;
@@ -3890,6 +4267,9 @@ class CreationBoardView extends BasesViewBase {
         });
       }
     };
+    /* R24：既然右键小窗把「属性展开」升成了板块级三态，编辑行这边也得有 ——
+       同一件事两个台面能力不一致，老板一定会撞上「这边怎么没有」。 */
+    mkTri("属性展开", "cb-seg-propsopen", "propsOpen", this.propsOpenDefault());
     mkTri("显正文", "cb-seg-body", "body", this.viewBodyDefault());
     mkTri("显示 YAML", "cb-seg-yaml", "yaml", this.optBool(K_YAML, false));
     mkTri("显示结尾双链", "cb-seg-links", "links", this.optBool(K_LINKS, true));
@@ -4105,7 +4485,7 @@ class CreationBoardView extends BasesViewBase {
       this.renderPanel();
       return;
     }
-    const base = { name: "新板块", source: type, rawSource: type, path: "", tag: "", formula: "", limit: 50, depth: 1, props: [], body: null, extra: {} };
+    const base = { name: "新板块", source: type, rawSource: type, path: "", tag: "", formula: "", limit: 50, depth: 1, props: [], body: null, propsOpen: null, extra: {} };
     if (type === "catchall") base.name = "其它";
     if (type === "formula") {
       const names = this.collectFormulas();

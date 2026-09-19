@@ -375,8 +375,10 @@ function wireEvents(app) {
       "I：propsOpenDefault() 默认 true（= 默认展开）");
     ok(/const open = dfltOpen \? !this\.prosToggledPaths\.has\(file\.path\) : this\.prosToggledPaths\.has\(file\.path\);/.test(vs),
       "I：卡片属性区按「与默认不同」记忆，默认展开");
-    ok(/if \(!this\.editorProps && !this\.propsOpenDefault\(\)\) \{/.test(vs),
-      "I：就地编辑浮层只在「默认展开」关掉时才替用户折叠");
+    /* R24：「默认展开」升成了**两层**（板块级优先 → 视图默认）→ 这里改走 propsOpenOn。
+       浮层拿的是 card.__cbSec；拿不到（比如从别处调）就回落视图默认，语义与旧版一致。 */
+    ok(/!this\.editorProps && !this\.propsOpenOn\(card \? card\.__cbSec : null\)/.test(vs),
+      "I（R24）：就地编辑浮层只在「默认展开」关掉时才替用户折叠（板块级优先，回落视图默认）");
     eq(/this\.prosOpenPaths/.test(vs), false, "I：旧的「只存展开集合」写法已彻底移除");
 
     const cbApp = STUB.makeApp();

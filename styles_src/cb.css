@@ -1306,28 +1306,12 @@
 }
 
 /* ============================================================
- * R12（boss 第 2/4 条）：板块标题 ⚙ 设置入口 + 拖动排序高亮
+ * R12（boss 第 2/4 条）：板块标题拖动排序高亮
+ * R24（boss 第 3 条）：板块标题那块 ⚙ **撤掉**了 → 改成右键弹设置小窗，.cb-sec-gear 样式一并删
  * ============================================================ */
 .cb-head-grab { cursor: grab; }
 .cb-sec-dragging { opacity: 0.5; }
 .cb-sec-drop { outline: 2px dashed var(--interactive-accent); outline-offset: 2px; }
-.cb-sec-gear {
-  margin-left: 4px;
-  padding: 0 4px;
-  border: none;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
-  /* R20 需求3：装的是自绘 SVG（不再是 emoji 字形） */
-  display: inline-flex;
-  align-items: center;
-}
-.cb-sec-gear:hover {
-  color: var(--text-normal);
-  background: var(--background-modifier-hover);
-}
 /* R12（boss 第 1 条）：悬停在「另一个目录」的卡上 = 整卡高亮（搬文件，不是插位） */
 .cb-card.cb-drop-move { outline: 2px solid var(--interactive-accent); outline-offset: -2px; }
 
@@ -1529,4 +1513,115 @@
 
 .cb-wrow .checkbox-container:has(input:checked)::after {
   transform: translateX(15px);
+}
+
+
+/* ============================================================
+ * R24（boss：「单个板块的设置应只对单独板块生效」）
+ *   ① 板块之间画一条分隔线
+ *   ② 双击板块名 → 就地改名（可编辑手感 + 输入框）
+ *   ③ 右键板块 → 鼠标处弹设置小窗（分组标题 / 三态行 / 打勾项 / 帮助块）
+ *   ④ 被「收起来」的卡片（淡出 + 虚线边，可右键恢复）
+ * 零裸色：一律走主题变量（r3b 剥 var 查裸色）。
+ * ============================================================ */
+
+/* ① 相邻板块之间一条简单的分隔线（子板块在板块体内，不受影响） */
+.cb-section + .cb-section {
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 14px;
+}
+
+/* ② 双击板块名就地改名 */
+.cb-section-name.cb-sec-name-edit {
+  cursor: text;
+  border-radius: var(--radius-s);
+  padding: 0 3px;
+  margin: 0 -3px;
+}
+.cb-section-name.cb-sec-name-edit:hover {
+  background: var(--background-modifier-hover);
+}
+.cb-sec-rename-input {
+  font: inherit;
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+  background: var(--background-primary);
+  border: 1px solid var(--interactive-accent);
+  border-radius: var(--radius-s);
+  padding: 0 4px;
+  min-width: 8em;
+}
+
+/* ③ 右键菜单（复用 .cb-ctxmenu 那套跟手定位） */
+.cb-ctxmenu.cb-secmenu {
+  min-width: 232px;
+}
+.cb-ctx-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 10px 2px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+.cb-ctx-head-hint {
+  margin-left: auto;
+  opacity: 0.75;
+}
+.cb-ctx-note {
+  padding: 6px 10px;
+  max-width: 260px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.cb-ctx-tri {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+}
+.cb-ctx-tri-lb {
+  flex: 1 1 auto;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+.cb-ctx-tri .cb-seg {
+  flex: 0 0 auto;
+}
+.cb-ctx-chk {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cb-ctx-tick {
+  flex: 0 0 auto;
+  width: 1em;
+  color: var(--text-accent);
+  font-size: var(--font-ui-small);
+}
+.cb-ctx-item.is-disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.cb-sec-help {
+  padding: 4px 10px 8px;
+  max-width: 268px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.cb-sec-help.is-hidden {
+  display: none;
+}
+
+/* ④ 被「收起来」的卡片 */
+.cb-card.is-cb-hidden {
+  opacity: 0.45;
+  border-style: dashed;
+}
+.cb-badge-hidden {
+  color: var(--text-muted);
 }

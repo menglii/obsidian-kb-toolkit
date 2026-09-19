@@ -179,12 +179,14 @@ async function boot(app, modules) {
       && /gearIcon\(this\.gearBtn\);/.test(cb)
       && /this\.gearBtn\.createSpan\(\{ cls: "cb-gear-text", text: "板块" \}\)/.test(cb),
       "C6（需求3）：顶栏按钮 = 自绘图标 + 「板块」文字");
-    ok(/const gear = head\.createEl\("button", \{ cls: "cb-sec-gear" \}\);\s*\n\s*gearIcon\(gear\);/.test(cb),
-      "C7（需求3）：板块标题旁的按钮也是自绘图标");
+    /* R24（boss 第 3 条）：板块标题旁那块 ⚙ 撤了 → 改成右键弹设置小窗 */
+    ok(cb.indexOf("cb-sec-gear") < 0, "C7（R24）：板块标题旁不再有自绘齿轮按钮（撤掉了）");
+    ok(/head\.addEventListener\("contextmenu"/.test(cb)
+      && cb.indexOf("openSecMenu(sec, evt.clientX, evt.clientY)") >= 0,
+      "C7b（R24）：改成右键板块 → 鼠标处弹设置小窗");
     ok(cbCss.indexOf(".cb-gear-icon") >= 0 && cbCss.indexOf(".cb-gear-text") >= 0
-      && /\.cb-gear\s*{[^}]*display:\s*inline-flex/.test(cbCss)
-      && /\.cb-sec-gear\s*{[^}]*display:\s*inline-flex/.test(cbCss),
-      "C8（需求3）：图标/文字样式齐（按钮改 flex 对齐，不再靠 font-size 撑字形）");
+      && /\.cb-gear\s*{[^}]*display:\s*inline-flex/.test(cbCss),
+      "C8（需求3）：顶栏图标/文字样式齐（按钮改 flex 对齐，不再靠 font-size 撑字形）");
   }
 
   /* ================= D. 需求4-①：视图配置面板只留必要项 ================= */
@@ -265,8 +267,9 @@ async function boot(app, modules) {
     ok(/\["", "继承", "跟随视图默认（现在 = "/.test(row)
       && /\["true", "开", /.test(row) && /\["false", "关", /.test(row),
       "F3（需求4-③）：三态 = 继承 / 开 / 关（语义与原先的下拉完全一致）");
-    eq((row.match(/mkTri\("/g) || []).length, 3,
-      "F4（需求4-③）：显正文 / 显示 YAML / 显示结尾双链 都改成按钮组");
+    /* R24 又补了一行「属性展开」→ 4 个 */
+    eq((row.match(/mkTri\("/g) || []).length, 4,
+      "F4（R24）：属性展开 / 显正文 / 显示 YAML / 显示结尾双链 都是按钮组");
     ok(/^    const mkTri = \(label, cls, key, viewOn\) => \{/m.test(row)
       && /this\.secs\[i\]\[key\] = nv;/.test(row),
       "F5（需求4-③）：mkTri 仍按同一个键写回（null = 继承，不污染手写配置）");
@@ -298,8 +301,10 @@ async function boot(app, modules) {
       "G2（需求4）：显示类（属性）= 视图给默认值 + 板块可单独覆盖，顶栏面板不掺和");
     ok(row.indexOf("cb-seg") >= 0 && rp.indexOf("cb-seg") < 0,
       "G3（需求4）：板块级三态按钮只在板块编辑行里（顶栏不出现）");
-    eq((cb.match(/gearIcon\(/g) || []).length, 3,
-      "G4（需求4）：两处齿轮用同一个图标函数（顶栏 + 板块标题），只画一份");
+    /* R24（boss 第 3 条）：板块标题旁那块 ⚙ 撤了 → 自绘齿轮现在只剩顶栏那一处用
+       （1 次函数定义 + 1 次顶栏调用 = 2） */
+    eq((cb.match(/gearIcon\(/g) || []).length, 2,
+      "G4（R24）：自绘齿轮只画一份、只剩顶栏在用（板块标题那块已撤）");
   }
 
   console.log("\nR20 结果: " + pass + " 通过 / " + fail + " 失败");

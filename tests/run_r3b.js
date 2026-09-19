@@ -78,8 +78,8 @@ const prodStyles = fs.readFileSync(path.join(ROOT, "styles.css"), "utf8");
 eq(selCount(prodStyles), styleSrcs.reduce((a, s) => a + selCount(s), 0),
   "选择器守恒（styles.css 产物 == styles_src/ 全部源之和，一条没丢）");
 ok((nsSrc + cbSrc).indexOf("kb-module-disabled") >= 0, "R11：置灰禁用规则真的在样式源里");
-ok(cbSrc.indexOf("cb-sec-gear") >= 0 && cbSrc.indexOf("cb-drop-move") >= 0,
-  "R12：板块 ⚙ 入口与拖动搬文件高亮规则在样式源里");
+ok(cbSrc.indexOf("cb-head-grab") >= 0 && cbSrc.indexOf("cb-drop-move") >= 0,
+  "R12/R24：板块标题拖动排序 + 拖动搬文件高亮规则在样式源里");
 ok(styleSrcs.some(s => s.indexOf(".kbt-search-input") >= 0) && cbSrc.indexOf(".cb-panel-adv") >= 0,
   "R13：设置页搜索框与面板「高级」折叠组样式都在源里");
 

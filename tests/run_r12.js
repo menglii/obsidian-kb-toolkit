@@ -81,8 +81,9 @@ function stripComments(s) { return String(s).replace(/\/\*[\s\S]*?\*\//g, "").re
       "B2：板块标题拖动 → reorder 落配置");
     ok(cb.indexOf("this.secDrag") >= 0 && /head\.setAttr\("draggable", "true"\)/.test(cb),
       "B3：板块标题可拖（secDrag 上下文独立于卡片拖拽）");
-    ok(cb.indexOf("cb-sec-gear") >= 0 && /this\.editIdx = sec\.isCatch \? this\.secs\.length - 1 : sec\.srcIndex/.test(cb),
-      "B4：板块标题 ⚙ → 打开面板并定位到该板块编辑行");
+    /* R24（boss 第 3 条）：那块 ⚙ 撤了 —— 板块级设置改走「右键板块 → 设置小窗」 */
+    ok(cb.indexOf("openSecMenu") >= 0 && /head\.addEventListener\("contextmenu"/.test(cb),
+      "B4（R24）：板块标题改成右键弹设置小窗（原 ⚙ 已撤）");
     ok(cb.indexOf("cb-drop-move") >= 0, "B5：跨目录悬停整卡高亮（区别于左右插入条）");
     ok(/dragleave[\s\S]{0,200}cb-drop-move/.test(cb), "B6：拖放离开时高亮清理干净");
   }
@@ -92,8 +93,9 @@ function stripComments(s) { return String(s).replace(/\/\*[\s\S]*?\*\//g, "").re
     const cb = stripComments(fs.readFileSync(path.join(PLUG, "vendor", "creation-board.js"), "utf8"));
     ok(/const K_YAML = "显示 YAML"/.test(cb) && /const K_LINKS = "显示结尾双链"/.test(cb),
       "C1：两个新配置键（视图级默认）");
-    ok(/"属性", "显正文", "显示 YAML", "显示结尾双链", "拖动搬文件", "排序", "sort"/.test(cb),
-      "C2：KNOWN_KEYS 收编新键（板块级写回不丢）");
+    /* R24 又收编了「属性展开」→ 字面量跟着长了一节（断言按新表核） */
+    ok(/"属性", "显正文", "显示 YAML", "显示结尾双链", "属性展开", "拖动搬文件", "排序", "sort"/.test(cb),
+      "C2：KNOWN_KEYS 收编新键（板块级写回不丢；R24 加「属性展开」）");
     ok(/yaml: tri\(o, "显示 YAML", "yaml"\)/.test(cb) && /links: tri\(o, "显示结尾双链", "links"\)/.test(cb),
       "C3：板块 spec 三态解析（true/false/继承）");
     ok(/if \(sec\.yaml === true \|\| sec\.yaml === false\) o\["显示 YAML"\] = sec\.yaml;/.test(cb)

@@ -55,6 +55,7 @@ function ok(c, n) { if (c) pass++; else { fail++; fails.push(n); console.log("  
 function eq(a, b, n) { ok(a === b, n + " (got=" + JSON.stringify(a) + " want=" + JSON.stringify(b) + ")"); }
 function click(el) { el.dispatchEvent(new W.MouseEvent("click", { bubbles: true, cancelable: true })); }
 function fire(el, type) { el.dispatchEvent(new W.Event(type, { bubbles: true, cancelable: true })); }
+function key(el, k) { el.dispatchEvent(new W.KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true })); }
 function head(t) { console.log("\n== " + t); }
 
 const SAVES = [];
@@ -219,60 +220,243 @@ function makeConfig(obj) {
   eq([...box.querySelectorAll(".cb-edit-sep")].map(e => e.textContent).join(","), "基础,显示",
     "仍分「基础 / 显示」两段");
   const segs = [...box.querySelectorAll(".cb-seg")];
-  eq(segs.length, 3, "3 个三态控件（显正文 / 显示 YAML / 显示结尾双链）");
+  eq(segs.length, 4, "4 个三态控件（属性展开 / 显正文 / 显示 YAML / 显示结尾双链）");
+  eq(segs.map(s => String(s.className).replace("cb-seg ", "")).join(","),
+    "cb-seg-propsopen,cb-seg-body,cb-seg-yaml,cb-seg-links",
+    "顺序跟右键小窗一致（属性展开在最前，两个台面同序）");
   ok(segs.every(s => s.querySelectorAll(".cb-seg-btn").length === 3), "每个都是 3 个并排小按钮");
   eq([...segs[0].querySelectorAll(".cb-seg-btn")].map(b => b.textContent).join(","), "继承,开,关",
     "三态文案 = 继承 / 开 / 关");
   ok(segs.every(s => s.querySelectorAll(".cb-seg-btn.is-on").length === 1),
     "每个控件恰好一个当前态高亮");
-  eq(segs[0].querySelector(".cb-seg-btn.is-on").textContent, "继承", "没设过 → 停在「继承」");
-  ok(segs[0].querySelector(".cb-seg-btn.is-on").getAttribute("title").indexOf("视图默认") >= 0,
+  /* 按下标取控件太脆（R24 在最前面插了一行就全错位）→ 一律按类名定位 */
+  const segBody = box.querySelector(".cb-seg-body");
+  ok(!!segBody, "拿得到「显正文」那一行（.cb-seg-body）");
+  eq(segBody.querySelector(".cb-seg-btn.is-on").textContent, "继承", "没设过 → 停在「继承」");
+  ok(segBody.querySelector(".cb-seg-btn.is-on").getAttribute("title").indexOf("视图默认") >= 0,
     "「继承」的 title 说明它继承的是什么");
   eq([...box.querySelectorAll("select")].map(s => s.className).join("|"),
     "cb-input cb-select-src|cb-input cb-select-sort",
     "只剩「数据源 / 排序」两个真下拉（三态下拉已全删）");
 
   /* 点「关」→ 写回 body=false 并重绘 */
-  const offBtn = [...segs[0].querySelectorAll(".cb-seg-btn")].find(b => b.textContent === "关");
-  click(offBtn);
+  click([...segBody.querySelectorAll(".cb-seg-btn")].find(b => b.textContent === "关"));
   eq(v.secs[0].body, false, "点「关」→ 该板块 显正文 = false（显式指定，不再继承）");
   const box2 = v.panelEl.querySelector("div.cb-edit[data-idx='0']");
-  eq(box2.querySelectorAll(".cb-seg")[0].querySelector(".cb-seg-btn.is-on").textContent, "关",
+  const segBody2 = box2.querySelector(".cb-seg-body");
+  eq(segBody2.querySelector(".cb-seg-btn.is-on").textContent, "关",
     "重绘后当前态跟着走到「关」");
-  click([...box2.querySelectorAll(".cb-seg")[0].querySelectorAll(".cb-seg-btn")].find(b => b.textContent === "继承"));
+  click([...segBody2.querySelectorAll(".cb-seg-btn")].find(b => b.textContent === "继承"));
   eq(v.secs[0].body, null, "点回「继承」→ body 回到 null（不污染手写配置）");
 
-  /* ---------- ④ 板块标题上的齿轮也是自绘 SVG ---------- */
-  head("需求3 · 板块标题旁齿轮");
-  const secGears = [...v.listEl.querySelectorAll("button.cb-sec-gear")];
-  eq(secGears.length, 1, "渲染出的板块标题旁各有一个 .cb-sec-gear");
-  ok(secGears.every(g => {
-    const s2 = g.querySelector("svg");
-    return s2 && s2.namespaceURI === SVGNS && s2.getAttribute("stroke") === "currentColor";
-  }), "每个都是同一个自绘图标（SVG 命名空间 + currentColor）");
-  eq(secGears.map(g => g.textContent).join(""), "", "按钮里没有 emoji 文本残留");
-  ok((secGears[0].getAttribute("title") || "").indexOf("板块设置") >= 0, "齿轮带悬停说明");
+  /* ---------- ④ R24：板块标题旁的 ⚙ 撤了 → 双击改名 + 右键弹设置小窗 ---------- */
+  head("R24 · 板块标题：撤 ⚙ / 双击改名 / 右键小窗");
+  eq(v.listEl.querySelectorAll("button.cb-sec-gear").length, 0,
+    "板块标题旁不再有 .cb-sec-gear（R24 把那块齿轮撤了）");
+  let secHead = v.listEl.querySelector(".cb-section .cb-section-head");
+  let nameEl = secHead && secHead.querySelector(".cb-section-name");
+  ok(!!nameEl, "板块标题里有 .cb-section-name（改名入口）");
+  eq(nameEl && nameEl.textContent, "收件箱", "标题写着板块名");
+  ok(nameEl && nameEl.hasClass("cb-sec-name-edit"), "可配置的板块 → 名字带「可编辑」标记（hover 有手感）");
+  ok((nameEl.getAttribute("title") || "").indexOf("双击改名") >= 0, "title 说明「双击改名 + 拖动排序」");
 
-  /* 打开「显示收容所」→ 收容所板块作为配置板块出现，它旁边也有齿轮 */
+  /* 双击 → 就地换输入框；Enter 提交 → 改内存 + 写回 .base「板块」段 */
+  fire(nameEl, "dblclick");
+  let rin = secHead.querySelector("input.cb-sec-rename-input");
+  ok(!!rin, "双击板块名 → 就地把名字换成输入框");
+  eq(rin && rin.value, "收件箱", "输入框预填当前板块名");
+  rin.value = "收件箱2";
+  key(rin, "Enter");
+  eq(v.secs[0].name, "收件箱2", "敲 Enter → 板块名真的改了");
+  ok(SAVES.some(s => s.key === "板块" && Array.isArray(s.val)
+    && s.val.some(x => x && x["名称"] === "收件箱2")),
+    "改名写回 config「板块」段（.base 真落盘，不是只改内存）");
+  nameEl = v.listEl.querySelector(".cb-section .cb-section-name");
+  eq(nameEl && nameEl.textContent, "收件箱2", "重绘后标题跟着走 → 改名即时生效");
+
+  /* Esc → 放弃改动（名字不动） */
+  fire(nameEl, "dblclick");
+  rin = v.listEl.querySelector("input.cb-sec-rename-input");
+  ok(!!rin, "再次双击 → 输入框又出来");
+  rin.value = "别改我";
+  key(rin, "Escape");
+  eq(v.secs[0].name, "收件箱2", "敲 Esc → 放弃改动（名字不变）");
+  eq(v.listEl.querySelector(".cb-section .cb-section-name").textContent, "收件箱2", "标题也回原名");
+
+  /* 改名要顺手迁移「折叠」状态（折叠键 = 板块名 —— 不迁就凭空丢） */
+  v.cfgSet("折叠", { "收件箱2": true });
+  v.repaint(false);
+  fire(v.listEl.querySelector(".cb-section .cb-section-name"), "dblclick");
+  let r2 = v.listEl.querySelector("input.cb-sec-rename-input");
+  r2.value = "收件箱3";
+  key(r2, "Enter");
+  const foldNow = v.cfgGet("折叠", null);
+  ok(foldNow && foldNow["收件箱3"] === true && foldNow["收件箱2"] === undefined,
+    "改名把「折叠」状态从旧名迁到新名（折叠键 = 板块名的坑）");
+  /* 改回原名，后面断言照旧 */
+  fire(v.listEl.querySelector(".cb-section .cb-section-name"), "dblclick");
+  r2 = v.listEl.querySelector("input.cb-sec-rename-input");
+  r2.value = "收件箱";
+  key(r2, "Enter");
+  eq(v.secs[0].name, "收件箱", "改回原名（后面断言照旧）");
+  v.cfgSet("折叠", null);
+  v.repaint(false);
+
+  /* 右键板块 → 鼠标处弹设置小窗（Windows 右键菜单那种） */
+  secHead = v.listEl.querySelector(".cb-section .cb-section-head");
+  secHead.dispatchEvent(new W.MouseEvent("contextmenu",
+    { bubbles: true, cancelable: true, clientX: 130, clientY: 96 }));
+  let menu = document.body.querySelector(".cb-ctxmenu.cb-secmenu");
+  ok(!!menu, "右键板块 → 弹 .cb-secmenu 小窗");
+  eq([...menu.querySelectorAll(".cb-ctx-head .cb-ctx-head-lb")].map(e => e.textContent).join(","),
+    "通用设置,笔记内容,文件操作", "三组标题 = 老板列的三组");
+  const triRows = [...menu.querySelectorAll(".cb-ctx-tri")];
+  eq(triRows.map(r => r.getAttribute("data-field")).join(","), "propsOpen,body,yaml,links",
+    "4 个**板块级**三态行（属性展开 / 内容展开 / 显示 YAML / 显示双链）");
+  ok(triRows.every(r => r.querySelectorAll(".cb-seg-btn").length === 3), "每行都是「继承 / 开 / 关」三态");
+  ok(triRows.every(r => r.querySelectorAll(".cb-seg-btn.is-on").length === 1), "每行恰一个当前态高亮");
+  eq(triRows[0].querySelector(".cb-seg-btn.is-on").textContent, "继承", "没设过 → 停在「继承」");
+  const ctxChks = [...menu.querySelectorAll(".cb-ctx-item.cb-ctx-chk")];
+  eq(ctxChks.map(e => e.getAttribute("data-key")).join(","),
+    "拖动搬文件,文件隐藏显示,查看隐藏的文件", "文件操作 3 个打勾项（视图级，不冒充板块级）");
+  ok(!!menu.querySelector(".cb-sec-help.is-hidden"), "「显示帮助」的说明块默认藏着（点了才展开）");
+  const acts = [...menu.querySelectorAll(".cb-ctx-item")].map(e => e.getAttribute("data-act")).filter(Boolean);
+  eq(acts[0], "刷新", "菜单第一项就是「刷新」");
+  /* R24：没覆盖时文案会带后缀「（已是默认）」→ 一律用前缀匹配，别写死整串 */
+  ok(acts.some(a => a.indexOf("重置设置") === 0), "通用设置里有「重置设置」");
+  ok(acts.indexOf("显示帮助") >= 0, "通用设置里有「显示帮助」");
+  ok((menu.style.left || "").indexOf("px") >= 0 && (menu.style.top || "").indexOf("px") >= 0,
+    "小窗落在鼠标处（left/top 真写了）");
+
+  /* 真点「内容展开 · 关」→ 只改这一个板块 */
+  click([...triRows[1].querySelectorAll(".cb-seg-btn")].find(b => b.textContent === "关"));
+  eq(v.secs[0].body, false, "点「内容展开 · 关」→ 该板块 body = false（只改这一块）");
+  ok(SAVES.some(s => s.key === "板块"), "跟着写回 config「板块」段");
+  ok(!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "点完一项 → 小窗自动收起（跟 Windows 一致）");
+
+  /* 真点「属性展开 · 关」→ 卡片属性区当场折叠（验板块级 propsOpen 真接了线） */
+  ok(!v.listEl.querySelector(".cb-card .cb-props").hasClass("cb-pros-fold"), "设之前属性区展开（继承视图默认）");
+  secHead = v.listEl.querySelector(".cb-section .cb-section-head");
+  secHead.dispatchEvent(new W.MouseEvent("contextmenu",
+    { bubbles: true, cancelable: true, clientX: 130, clientY: 96 }));
+  menu = document.body.querySelector(".cb-ctxmenu.cb-secmenu");
+  const poRow = [...menu.querySelectorAll(".cb-ctx-tri")].find(r => r.getAttribute("data-field") === "propsOpen");
+  click([...poRow.querySelectorAll(".cb-seg-btn")].find(b => b.textContent === "关"));
+  eq(v.secs[0].propsOpen, false, "点「属性展开 · 关」→ 该板块 propsOpen = false");
+  ok(v.listEl.querySelector(".cb-card .cb-props").hasClass("cb-pros-fold"),
+    "这个板块的卡片属性区真的折叠了（板块级 propsOpen 接线无误）");
+  eq(v.propsOpenDefault(), true, "视图级默认没被动过（板块覆盖与视图默认是两层）");
+
+  /* 「重置设置」→ 把这个板块的板块级覆盖全清掉；没覆盖时置灰 */
+  secHead = v.listEl.querySelector(".cb-section .cb-section-head");
+  secHead.dispatchEvent(new W.MouseEvent("contextmenu",
+    { bubbles: true, cancelable: true, clientX: 130, clientY: 96 }));
+  menu = document.body.querySelector(".cb-ctxmenu.cb-secmenu");
+  let rst = [...menu.querySelectorAll(".cb-ctx-item")].find(e => (e.getAttribute("data-act") || "").indexOf("重置设置") === 0);
+  ok(!!rst && !rst.hasClass("is-disabled"), "有覆盖 → 「重置设置」可点");
+  click(rst);
+  eq(v.secs[0].propsOpen, null, "重置后 属性展开 回 null（继承视图）");
+  eq(v.secs[0].body, null, "重置后 内容展开 回 null");
+  ok(!v.listEl.querySelector(".cb-card .cb-props").hasClass("cb-pros-fold"), "重置后卡片属性区又展开了");
+  secHead = v.listEl.querySelector(".cb-section .cb-section-head");
+  secHead.dispatchEvent(new W.MouseEvent("contextmenu",
+    { bubbles: true, cancelable: true, clientX: 130, clientY: 96 }));
+  menu = document.body.querySelector(".cb-ctxmenu.cb-secmenu");
+  rst = [...menu.querySelectorAll(".cb-ctx-item")].find(e => (e.getAttribute("data-act") || "").indexOf("重置设置") === 0);
+  ok(rst.hasClass("is-disabled"), "已是默认 → 「重置设置」置灰（不做假按钮）");
+  v.closeSecMenu();
+
+  /* 「显示帮助」点一下 → 说明块露出来（带上这个板块的名字） */
+  secHead = v.listEl.querySelector(".cb-section .cb-section-head");
+  secHead.dispatchEvent(new W.MouseEvent("contextmenu",
+    { bubbles: true, cancelable: true, clientX: 130, clientY: 96 }));
+  menu = document.body.querySelector(".cb-ctxmenu.cb-secmenu");
+  click([...menu.querySelectorAll(".cb-ctx-item")].find(e => e.getAttribute("data-act") === "显示帮助"));
+  const hlp = document.body.querySelector(".cb-ctxmenu.cb-secmenu .cb-sec-help");
+  ok(!!hlp && !hlp.hasClass("is-hidden"), "点「显示帮助」→ 说明块露出来");
+  ok(hlp && /收件箱/.test(hlp.textContent), "说明里带上这个板块的名字（不是通用废话）");
+
+  /* 「刷新」点一下不炸（绕开 computeSig 强制重画） */
+  const rfBtn = [...document.body.querySelectorAll(".cb-ctxmenu.cb-secmenu .cb-ctx-item")]
+    .find(e => e.getAttribute("data-act") === "刷新");
+  ok(!!rfBtn, "菜单里能拿到「刷新」");
+  click(rfBtn);
+  ok(!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "点「刷新」→ 没抛异常且小窗收起");
+  eq(v.listEl.querySelectorAll(".cb-section").length, 1, "刷新后板块照旧渲染（没被刷没）");
+
+  /* 「查看隐藏的文件」打勾 → 写回视图级 config；隐藏 / 恢复一篇 */
+  secHead = v.listEl.querySelector(".cb-section .cb-section-head");
+  secHead.dispatchEvent(new W.MouseEvent("contextmenu",
+    { bubbles: true, cancelable: true, clientX: 130, clientY: 96 }));
+  menu = document.body.querySelector(".cb-ctxmenu.cb-secmenu");
+  const chkShow = [...menu.querySelectorAll(".cb-ctx-chk")].find(e => e.getAttribute("data-key") === "查看隐藏的文件");
+  eq(chkShow.querySelector(".cb-ctx-tick").textContent, "", "默认没打勾");
+  click(chkShow);
+  eq(v.cfgGet("查看隐藏的文件", false), true, "点一下 → 写回 config「查看隐藏的文件」= true");
+
+  v.cfgSet("查看隐藏的文件", null);
+  v.repaint(false);
+  eq(v.listEl.querySelectorAll(".cb-card").length, 2, "先 2 张卡");
+  v.toggleHidden("01_新知识库/笔记1.md");
+  eq(v.listEl.querySelectorAll(".cb-card").length, 1, "收起来一篇 → 只渲染 1 张（「查看隐藏的文件」关着）");
+  eq(v.listEl.querySelectorAll(".cb-badge-hidden").length, 1, "板块头出现「已隐藏 1」徽标");
+  ok(/已隐藏 1/.test(v.listEl.querySelector(".cb-badge-hidden").textContent), "徽标文案带上条数");
+  v.cfgSet("查看隐藏的文件", true);
+  v.repaint(false);
+  eq(v.listEl.querySelectorAll(".cb-card").length, 2, "打开「查看隐藏的文件」→ 卡片回来");
+  ok(!!v.listEl.querySelector(".cb-card.is-cb-hidden"), "回来的那张带 .is-cb-hidden（淡出 + 虚线，仍可右键恢复）");
+  v.toggleHidden("01_新知识库/笔记1.md");
+  v.cfgSet("查看隐藏的文件", null);
+  v.repaint(false);
+  eq(v.listEl.querySelectorAll(".cb-card").length, 2, "取消隐藏 → 恢复原样（不残留）");
+
+  /* ---------- ⑤ R24：收容所也走同一套（它是「配置给的板块」，不是自动分组） ---------- */
+  head("R24 · 收容所：同样可改名 / 可单设，且板块级**隔离**");
   const catchBox = behSwitches[1].querySelector("input.cb-opt-box");
   catchBox.checked = true;
   fire(catchBox, "change");
-  eq(v.sections.length, 2, "打开「显示收容所」后 → 2 个板块都渲染");
-  eq(v.listEl.querySelectorAll("button.cb-sec-gear").length, 2, "收容所板块旁同样有齿轮（都走同一个图标函数）");
-  click(v.listEl.querySelectorAll("button.cb-sec-gear")[1]);
-  eq(v.editIdx, v.secs.length - 1, "点板块标题齿轮 → 面板打开并定位到该板块的编辑行");
-  ok(v.panelOpen, "面板被带开（不是「点了没反应」）");
+  eq(v.sections.length, 2, "打开「显示收容所」→ 2 个板块都渲染");
+  const catchHead = [...v.listEl.querySelectorAll(".cb-section")][1].querySelector(".cb-section-head");
+  const catchName = catchHead.querySelector(".cb-section-name");
+  ok(!!catchName && catchName.hasClass("cb-sec-name-edit"),
+    "收容所是配置给的板块 → 同样可双击改名（跟自动分组 / 公式组区分开）");
+  eq(v.listEl.querySelectorAll("button.cb-sec-gear").length, 0, "收容所板块旁也没有齿轮（全都撤了）");
+  catchHead.dispatchEvent(new W.MouseEvent("contextmenu",
+    { bubbles: true, cancelable: true, clientX: 70, clientY: 210 }));
+  const cmenu = document.body.querySelector(".cb-ctxmenu.cb-secmenu");
+  ok(!!cmenu, "右键收容所 → 一样弹小窗");
+  eq(cmenu.querySelectorAll(".cb-ctx-tri").length, 4, "收容所同样有 4 个板块级三态行");
+  ok(!cmenu.querySelector(".cb-ctx-note"), "它不是「不能单独设置」那类 → 不出现说明块");
+  eq(cmenu.querySelectorAll(".cb-ctx-item.cb-ctx-chk").length, 3, "文件操作 3 项照旧（视图级，每个板块都在）");
+  ok(!![...cmenu.querySelectorAll(".cb-ctx-item")].find(e => e.getAttribute("data-act") === "刷新"),
+    "「刷新」对收容所照样有");
 
-  /* ---------- ⑤ 收容所板块的编辑行也不炸 ---------- */
-  head("需求4-③ · 收容所板块的编辑行");
+  /* 🔴 老板的核心诉求：改收容所只能改到收容所那一份，别连坐第一个板块 */
+  const ci = v.secs.findIndex(s => s.source === "catchall");
+  ok(ci >= 0, "收容所在 secs 里按 source 找得到（secIndexOf 的 catchall 分支）");
+  const cRow = [...cmenu.querySelectorAll(".cb-ctx-tri")].find(r => r.getAttribute("data-field") === "body");
+  click([...cRow.querySelectorAll(".cb-seg-btn")].find(b => b.textContent === "关"));
+  eq(v.secs[ci].body, false, "右键改收容所「内容展开」→ 只写进收容所那一份");
+  eq(v.secs[0].body, null, "第一个板块（收件箱）没被连坐 —— 板块级隔离成立");
+  ok(!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "点完自动收起");
+  v.resetSection(ci);
+  eq(v.secs[ci].body, null, "（收拾现场）把收容所那份覆盖清回去");
+
+  /* 面板里的收容所编辑行照旧能开（点板块行 ✎，等价于原来「点齿轮」那条路） */
+  const secRows2 = [...v.panelBodyEl.querySelectorAll(".cb-panel-list .cb-row")];
+  eq(secRows2.length, 2, "面板板块段仍列 2 行");
+  click(secRows2[1].querySelector(".cb-editbtn"));
   const cx = v.panelEl.querySelector("div.cb-edit[data-idx='1']");
-  ok(!!cx, "点板块标题齿轮 → 收容所的编辑行已经就地打开（不用再点 ✎）");
-  eq([...cx.querySelectorAll(".cb-seg")].length, 3, "三态控件照旧 3 个");
+  ok(!!cx, "点收容所那行 ✎ → 编辑行就地展开");
+  eq([...cx.querySelectorAll(".cb-seg")].length, 4, "三态控件 4 个（R24 又加了「属性展开」）");
+  ok(!!cx.querySelector(".cb-seg-propsopen") && !!cx.querySelector(".cb-seg-body"),
+    "「属性展开」也进了编辑行（两个台面能力一致，不是只有右键菜单有）");
   ok(cx.textContent.indexOf("上限") < 0, "收容所不显示「上限」（语义如此，不是漏渲染）");
   ok(/收容所固定排最后/.test(cx.textContent), "收容所给出归属说明");
   eq(cx.querySelector(".cb-select-src").value, "catchall", "数据源下拉停在「收容所」");
   click(cx.querySelector(".cb-btn-done"));
   eq(v.editIdx, -1, "点「完成」→ 编辑行收起");
+  ok(v.panelOpen, "（准备态）面板仍开着 —— 交给 ⑥ 验遮罩跟着窗");
 
   /* ---------- ⑥ R22：板块设置 = 悬浮小窗（遮罩 + ✕ + 点遮罩收起） ---------- */
   head("R22 · 面板改悬浮小窗");
