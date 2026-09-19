@@ -7537,10 +7537,11 @@ KB.define("core/settingTab", function () {
     { key: "automation", label: "笔记",   dot: "cream" },
     { key: "base",       label: "Base",   dot: "taro" }
   ];
+  /* R19 需求5：模块说明一句话就够 —— 细节全在各页的「帮助」小窗 / 状态小窗里 */
   var MOD_TIP = {
-    rebuild: "预览 → 执行 → 回滚；把库顶层整理成一个结构完整的知识库",
-    automation: "新笔记自动补全 · 按标签归位 · 一键补全存量笔记",
-    base: "创作看板 + 内容流视图 —— 换个方式看库，不碰文件"
+    rebuild: "预览 → 执行 → 回滚，全程可撤销",
+    automation: "新笔记自动补全 · 按标签归位",
+    base: "两个只读看板视图，不改文件"
   };
   /* R18：每页的「帮助」小窗内容 —— 照效果图的「键 + 说明」结构：{ k: 键, v: 说明 }。
    * 值里需要动态数字（路由条数 / 元目录名）的条目，用 HELP_OF() 现算。 */
@@ -7681,9 +7682,10 @@ KB.define("core/settingTab", function () {
     pathDesc(setting, field) {
       if (!setting || typeof setting.setDesc !== "function") return null;
       var P = this.plugin.settings.paths;
+      /* R19 需求5：一句话说清「它是什么 + 当前值」 */
       var text = field === "knowledgeBase"
-        ? "笔记实际存放的顶层目录名（新建时新建的目录也用这个名字）。当前：" + P.knowledgeBase
-        : "相对知识库根的名字（模板/指令集/索引/日志），当前：" + P.metaDir;
+        ? "笔记存放的顶层目录名，当前：" + P.knowledgeBase
+        : "元数据目录名（相对库根），当前：" + P.metaDir;
       setting.setDesc(text);
       return text;
     }
@@ -7691,9 +7693,10 @@ KB.define("core/settingTab", function () {
     boardDesc(setting) {
       if (!setting || typeof setting.setDesc !== "function") return null;
       var v = String(this.plugin.settings.modules["base.boardExclude"] || "");
+      /* R19 需求5：顺手去掉原来的 Markdown 反引号 —— setDesc 是纯文本，反引号会原样显示出来 */
       var text = v
-        ? "当前排除：`" + v + "`（按目录段匹配；写了就会从看板里挡掉这些目录）"
-        : "当前留空 → 看板默认展示整个笔记库（不排除任何目录）";
+        ? "排除：" + v
+        : "留空 —— 看板展示整个笔记库";
       setting.setDesc(text);
       return text;
     }
@@ -7879,23 +7882,35 @@ KB.define("core/settingTab", function () {
     tab._openPop = openPop;
     tab._closePop = closePop;
     /* R18：条目 = { k: 键, v: 说明 } —— 小窗里一行一条（效果图 .hrow：键粗、说明灰） */
+    function fillPop(body, items) {
+      if (!body) return body;
+      body.empty();
+      var list = items || [];
+      for (var i = 0; i < list.length; i++) {
+        if (i) body.createEl("div", { cls: "kbt-help-sep" });
+        var it = body.createEl("div", { cls: "kbt-help-item kbt-hrow" });
+        it.createEl("span", { cls: "kbt-help-title kbt-hk", text: list[i].k });
+        it.createEl("span", { cls: "kbt-help-text kbt-hv setting-item-description", text: list[i].v });
+      }
+      return body;
+    }
     function buildPop(host, key, title, items) {
       var wrap = host.createEl("div", { cls: "kbt-pop", attr: { hidden: "" } });
       var mask = wrap.createEl("div", { cls: "kbt-pop-mask" });
       var win = wrap.createEl("div", { cls: "kbt-pop-win" });
       var ph = win.createEl("div", { cls: "kbt-pop-head" });
-      ph.createEl("span", { cls: "kbt-pop-title", text: title });
+      var phText = ph.createEl("span", { cls: "kbt-pop-title", text: title });
       var x = ph.createEl("button", { cls: "kbt-pop-x", attr: { type: "button", "aria-label": "关闭" } });
       x.textContent = "×";
       var body = win.createEl("div", { cls: "kbt-pop-body" });
-      for (var i = 0; i < items.length; i++) {
-        if (i) body.createEl("div", { cls: "kbt-help-sep" });
-        var it = body.createEl("div", { cls: "kbt-help-item kbt-hrow" });
-        it.createEl("span", { cls: "kbt-help-title kbt-hk", text: items[i].k });
-        it.createEl("span", { cls: "kbt-help-text kbt-hv setting-item-description", text: items[i].v });
-      }
+      fillPop(body, items);
       x.addEventListener("click", function () { closePop(key); });
       mask.addEventListener("click", function () { closePop(key); });
+      /* R19：状态小窗的内容是**异步算出来的**（要读文件系统才知道「未创建/半成品」），
+       * 所以这里留一个「就地换内容」的口子，调用方算完直接填。 */
+      wrap._kbFill = function (list) { fillPop(body, list); };
+      wrap._kbTitle = function (t) { if (phText) phText.textContent = t; };
+      wrap._kbBody = body;
       pops[key] = wrap;
       return wrap;
     }
@@ -7952,16 +7967,40 @@ KB.define("core/settingTab", function () {
         .onChange(function (v) { applyModule(key, v); }); });
       groups[key].createEl("div", { cls: "kbt-rule" });      /* 短横：只占左边一小条 */
     }
-    /* R18（效果图 .mstat）：状态行 = 主行 + ⓘ（同一行）；副行留给细节（没有就不占位）。
-     * ⓘ 的提示 = 模块总说明 + 下一步引导 —— 效果图把提示放在这一行里。 */
+    /* R19 需求3：状态 = 独立一栏（栏目名「当前状态」+ 卡片），**整栏可点** → 悬浮窗看全部状态。
+     * 老板原话：「这些说明文字各自弄成一栏，点击可查看当前状态信息，以悬浮窗显示」。
+     * 所以页面上只留 主行 + 一句短副行；细节全部进 statusPop（调用方用 setItems 塞）。
+     * 注意：openStatus 是函数声明（会提升），可以先用后定义。 */
     function statusLine(box, mainText, tip) {
-      var el = box.createEl("div", { cls: "kbt-status callout", attr: { "data-callout": "info" } });
+      var key = box._kbKey || tab._tab || "";
+      var popKey = key + ":status";
+      var wrap = buildPop(box, popKey, "当前状态 · " + (TAB_LABEL[key] || ""), []);
+      var sec = box.createEl("div", { cls: "kbt-sec kbt-status-card" });
+      sec.createEl("div", { cls: "kbt-lb", text: "当前状态" });
+      var card = sec.createEl("div", { cls: "kbt-card" });
+      var el = card.createEl("div", { cls: "kbt-status callout", attr: { "data-callout": "info" } });
       var top = el.createEl("div", { cls: "kbt-status-top" });
       var m = top.createEl("div", { cls: "kbt-status-main" });
       m.textContent = mainText;
-      infoDot(top, tip || "提示", function () { tab._openPop(box._kbKey || tab._tab); });
+      infoDot(top, tip || "提示", openStatus);
+      top.createEl("span", { cls: "kbt-status-more", text: "详情 ›" });
       var sub = el.createEl("div", { cls: "kbt-status-sub setting-item-description" });
-      return { el: el, main: m, sub: sub };
+      var st = {
+        el: el, main: m, sub: sub, sec: sec, card: card, open: openStatus, items: [],
+        setItems: function (list) {
+          st.items = list || [];
+          if (wrap && wrap._kbFill) wrap._kbFill(st.items);
+          return st;
+        }
+      };
+      function openStatus() { return tab._openPop(popKey); }
+      /* 整栏可点（ⓘ 自己会开，别重复触发） */
+      sec.addEventListener("click", function (ev) {
+        var t = ev && ev.target;
+        if (t && t.closest && t.closest(".kbt-info")) return;
+        openStatus();
+      });
+      return st;
     }
     /* R18（效果图 .sec > .lb + .card）：栏目 = 卡片外一个小标签 + 卡片本体 */
     function makeSec(box, label) {
@@ -8009,8 +8048,7 @@ KB.define("core/settingTab", function () {
         text: "模块已关闭 —— 下面这些只是摆出来占位（点不动）；打开上方开关即可启用。" });
     }
 
-    /* R18：状态行（主行 + ⓘ）；副行放细节，没有就不占位。
-     * 🔴 文案里**不许出现 Markdown 星号**：setDesc/textContent 都是纯文本，`**` 会原样糊在界面上。 */
+    /* R19：状态栏（独立一栏 + 悬浮窗）。副行只留一句短的，长说明全进 statusPop。 */
     var st0 = statusLine(containerEl, "当前状态：读取中…",
       MOD_TIP.rebuild + "　下一步：先「生成预览报告」看看会搬哪些；或用「打开向导」初始化。");
     (async function () {
@@ -8028,36 +8066,51 @@ KB.define("core/settingTab", function () {
           ? (st.oldFolderExists ? "还没建出库根" : "未创建")
           : (st.state === "done" ? "已是已完成态" : "半成品（顶层仍有待搬项）");
         st0.main.textContent = "当前状态：" + main + "（新建根 " + st.root + "）";
-        st0.sub.textContent = tail + (st.state === "fresh"
-          ? "。下一步：先点「生成预览报告」看看会搬哪些，或用「辅助」里的向导初始化。" : "");
-      } catch (e) { st0.main.textContent = "当前状态：读取失败（不影响下方操作）"; }
+        st0.sub.textContent = "顶层待搬 " + st.movableCount + " 项 · 点本栏看详情";
+        st0.setItems([
+          { k: "状态", v: main },
+          { k: "新建根", v: st.root },
+          { k: "旧文件区", v: st.oldFolderExists ? "已存在 —— 本次走「并入模式」" : "还没有，本次会新建" },
+          { k: "顶层待搬", v: st.movableCount + " 项" },
+          { k: "这次执行会发生什么", v: tail },
+          { k: "下一步", v: "先点「生成预览报告」看看会搬哪些，或用「辅助」里的向导初始化" }
+        ]);
+      } catch (e) {
+        st0.main.textContent = "当前状态：读取失败（不影响下方操作）";
+        st0.sub.textContent = "点本栏看详情";
+        st0.setItems([
+          { k: "状态", v: "读取失败（不影响下方操作）" },
+          { k: "可能原因", v: "库根还没建、或元数据目录被改名。可在「高级」里核对两个路径" }
+        ]);
+      }
     })();
 
-    /* R18（效果图 核心操作）：一行一件事，行间一条淡分隔线；预览=主色，执行/回滚=警示色 */
+    /* R19 需求4：三个按钮去掉彩色底（setCta 紫 / setWarning 红），统一素色 —— 样式见 kbt.css。 */
     var coreCard = makeSec(containerEl, "核心操作");
     coreCard.classList.add("kbt-core-actions");
     new obsidian.Setting(coreCard)
       .setName("预览报告")
-      .addButton(function (b) { b.setButtonText("生成预览报告").setCta()
+      .addButton(function (b) { b.setButtonText("生成预览报告")
         .onClick(async function () { var mod = rebuildModule(); if (mod) await mod.runPreview(); }); });
     new obsidian.Setting(coreCard)
       .setName("执行")
-      .addButton(function (b) { b.setButtonText("执行").setWarning()
+      .addButton(function (b) { b.setButtonText("执行")
         .onClick(async function () { var mod = rebuildModule(); if (mod) await mod.startConfirm("execute"); }); });
     new obsidian.Setting(coreCard)
       .setName("回滚")
-      .addButton(function (b) { b.setButtonText("回滚").setWarning()
+      .addButton(function (b) { b.setButtonText("回滚")
         .onClick(async function () { var mod = rebuildModule(); if (mod) await mod.startConfirm("rollback"); }); });
 
-    /* R18（效果图 辅助）：向导 + 操作日志合成一栏；模块关着也能点（.is-aux 保住指针事件） */
+    /* R18（效果图 辅助）：向导 + 操作日志合成一栏；模块关着也能点（.is-aux 保住指针事件）
+     * R19 需求5：说明文字统一精简成一句话。 */
     var auxCard = makeSec(containerEl, "辅助");
     auxCard.classList.add("is-aux");
     new obsidian.Setting(auxCard)
-      .setName("首次使用向导").setDesc("重走一遍目录名 / 模块开关的初始化；不改动任何笔记文件")
+      .setName("首次使用向导").setDesc("重走初始化，不动笔记文件")
       .addButton(function (b) { b.setButtonText("打开向导")
         .onClick(function () { if (KB.modules.openWizard) KB.modules.openWizard(plugin); }); });
     new obsidian.Setting(auxCard)
-      .setName("操作日志").setDesc("预览 / 执行 / 回滚都会在元数据目录的「05_操作日志」里留一篇可读报告")
+      .setName("操作日志").setDesc("每次预览 / 执行 / 回滚都留一篇报告")
       .addButton(function (b) { b.setButtonText("打开最近一篇")
         .onClick(async function () { var mod = rebuildModule(); if (mod) await mod.openLog(); }); });
 
@@ -8113,22 +8166,34 @@ KB.define("core/settingTab", function () {
     var tplSvc0 = KB.services.templates;
     var tplCnt = 0;
     try { tplCnt = tplSvc0.listAll(S, tplSvc0.scan(plugin.app, S)).length; } catch (e) { tplCnt = 0; }
+    var propKey = S.automation.property || "文件位置";
+    var propOpts = (S.automation.propertyOptions || {})[propKey] || [];
     var stA = statusLine(containerEl, "当前状态：",
       MOD_TIP.automation + "　新建补全 " + (S.automation.createFill !== false ? "开" : "关") +
       "，移动同步 " + (S.automation.fixCenterLink !== false ? "开" : "关") + "。");
     stA.main.textContent = "当前状态：" + (S.modules.automation === true ? "已启用" : "已关闭");
-    stA.sub.textContent = "路由 " + routes + " 条 · 模板 " + tplCnt + " 套";
+    stA.sub.textContent = "路由 " + routes + " 条 · 模板 " + tplCnt + " 套 · 点本栏看详情";
+    stA.setItems([
+      { k: "模块开关", v: S.modules.automation === true ? "打开着" : "关着" },
+      { k: "标签-目录映射", v: routes + " 条路由 —— 决定新笔记按标签落到哪个目录" },
+      { k: "创建补全模板", v: tplCnt + " 套可选；新建笔记时按目录挑一套（模板库里的 .md）" },
+      { k: "创建时自动补全", v: S.automation.createFill !== false ? "开 —— 空白新笔记自动补 YAML 头与尾部双链" : "关" },
+      { k: "移动后同步", v: S.automation.fixCenterLink !== false ? "开 —— 落位后自动同步 YAML 与尾部双链" : "关" },
+      { k: "属性候选值下拉", v: "「" + propKey + "」可选 " + propOpts.length + " 个落点。Obsidian 原生只收库里已用过的值，" +
+          "空目录（如「01_执行中」）永远不出现在下拉里 —— 这里把候选值补齐" },
+      { k: "被 Templater 接管的目录", v: "那些目录的新笔记由 Templater 模板落盘，本插件只补「" + propKey + "」这一个键" }
+    ]);
 
-    /* 栏目一：自动补全（两个开关） */
+    /* 栏目一：自动补全（两个开关）—— R19 需求5：说明精简 */
     var fillCard = makeSec(containerEl, "自动补全");
     new obsidian.Setting(fillCard)
       .setName("创建时自动补全")
-      .setDesc("只对空白新文件生效，补什么由「当前模板」决定")
+      .setDesc("只对空白新笔记生效")
       .addToggle(function (t) { t.setValue(S.automation.createFill !== false)
         .onChange(function (v) { S.automation.createFill = v; KB.services.settings.saveSettings(plugin); }); });
     new obsidian.Setting(fillCard)
       .setName("移动后同步")
-      .setDesc("移动统一走移动引擎，落位后自动同步 YAML 与尾部双链")
+      .setDesc("落位后自动同步 YAML 与双链")
       .addToggle(function (t) { t.setValue(S.automation.fixCenterLink !== false)
         .onChange(function (v) { S.automation.fixCenterLink = v; KB.services.settings.saveSettings(plugin); }); });
 
@@ -8141,8 +8206,8 @@ KB.define("core/settingTab", function () {
     afHint("");
     new obsidian.Setting(batchCard)
       .setName("一键补全")
-      .setDesc("扫描整个知识库补齐缺失项；先出报告再写盘")
-      .addButton(function (b) { b.setButtonText("开始扫描").setCta()
+      .setDesc("扫描全库补齐缺失项；先出报告再写盘")
+      .addButton(function (b) { b.setButtonText("开始扫描")
         .onClick(async function () {
           var mod = plugin.registry && plugin.registry.active && plugin.registry.active.automation;
           if (!mod) { new obsidian.Notice("知识库工具集：请先打开「笔记自动化」。", 8000); return; }
@@ -8152,7 +8217,7 @@ KB.define("core/settingTab", function () {
           else afHint("上次扫描：" + r.scanned + " 篇里有 " + r.todo + " 篇待补（已在弹窗里确认）。");
         }); });
     var routesSetting = new obsidian.Setting(batchCard)
-      .setName("标签-目录映射表").setDesc("共 " + routes + " 条路由；沿用 note-locator 路由表，R2 首次启动自动迁移")
+      .setName("标签-目录映射表").setDesc("共 " + routes + " 条路由")
       .addButton(function (b) { b.setButtonText("查看 / 编辑")
         .onClick(function () {
           if (KB.modules.RoutesModal) new KB.modules.RoutesModal(plugin.app, plugin).open();
@@ -8225,7 +8290,7 @@ KB.define("core/settingTab", function () {
 
     var tplButtons = new obsidian.Setting(adv2)
       .setName("模板操作").setDesc("保存 / 另存为 / 从已有笔记提取");
-    tplButtons.addButton(function (b) { b.setButtonText("保存模板").setCta()
+    tplButtons.addButton(function (b) { b.setButtonText("保存模板")
       .onClick(async function () {
         var text = tab.draftTemplate(activeId);
         var r = await tplSvc.writeFile(plugin.app, S, activeName(), text);
@@ -8278,7 +8343,7 @@ KB.define("core/settingTab", function () {
         tab.keepAnchor(function () { tab.display(); });
       }); });
     if (tplSvc.isFileId(activeId)) {
-      tplButtons.addButton(function (b) { b.setButtonText("删除此模板").setWarning()
+      tplButtons.addButton(function (b) { b.setButtonText("删除此模板")
         .onClick(async function () {
           var r = await tplSvc.removeFile(plugin.app, S, activeId);
           if (!r.ok) { new obsidian.Notice("知识库工具集：删除失败 —— " + r.reason, 9000); return; }
@@ -8289,7 +8354,7 @@ KB.define("core/settingTab", function () {
           tab.keepAnchor(function () { tab.display(); });
         }); });
     } else if (tplSvc.isCustom(S, activeId) || (tplSvc.get(S, activeId) || {}).overridden) {
-      tplButtons.addButton(function (b) { b.setButtonText("恢复内置").setWarning()
+      tplButtons.addButton(function (b) { b.setButtonText("恢复内置")
         .onClick(async function () {
           tplSvc.remove(S, activeId);
           tab._tplDraft = null;
@@ -8352,7 +8417,7 @@ KB.define("core/settingTab", function () {
       t.setPlaceholder("如 " + S.paths.knowledgeBase + "/00_Inbox 或 灵感杂记");
       commitOnBlur(t, function (v) { newValue = String(v || ""); return true; });
     });
-    addSetting.addButton(function (b) { b.setButtonText("添加").setCta().onClick(function () { addRule(); }); });
+    addSetting.addButton(function (b) { b.setButtonText("添加").onClick(function () { addRule(); }); });
 
     /* R18：帮助（一栏 + 悬浮小窗） */
     helpRow(containerEl, "automation");
@@ -8372,8 +8437,16 @@ KB.define("core/settingTab", function () {
     var stB = statusLine(containerEl, "当前状态：", MOD_TIP.base);
     stB.main.textContent = "当前状态：" + (S.modules.base === true ? "已启用" : "已关闭");
     stB.sub.textContent = "创作看板 " + (S.modules["base.creationBoard"] !== false ? "开" : "关") +
-      " · 内容流 " + (S.modules["base.noteStream"] !== false ? "开" : "关") +
-      " · 只读视图，不改动任何笔记";
+      " · 内容流 " + (S.modules["base.noteStream"] !== false ? "开" : "关") + " · 点本栏看详情";
+    var boardEx0 = String(S.modules["base.boardExclude"] || "");
+    stB.setItems([
+      { k: "模块开关", v: S.modules.base === true ? "打开着" : "关着" },
+      { k: "创作看板", v: S.modules["base.creationBoard"] !== false ? "开 —— 按板块排布，卡片可拖动搬文件" : "关" },
+      { k: "内容流视图", v: S.modules["base.noteStream"] !== false ? "开 —— 时间线预览正文，长库也不卡" : "关" },
+      { k: "看板范围", v: boardEx0 ? "排除：" + boardEx0 : "整个笔记库（没排除任何目录）" },
+      { k: "这两个视图", v: "只读 —— 不改动任何笔记文件" },
+      { k: "配置存在哪", v: "存在 .base 文件的视图块里，跟着笔记走；换主题 / 换机器都还在" }
+    ]);
 
     /* 栏目：内嵌视图 */
     var viewCard = makeSec(containerEl, "内嵌视图");
@@ -8413,8 +8486,7 @@ KB.define("core/settingTab", function () {
     var adv3 = makeAdv(containerEl);
     new obsidian.Setting(adv3)
       .setName("卡片宽度 / 空位铺满整行")
-      .setDesc("按视图设置：在笔记里打开看板 → 视图右上角 ⚙ → 「卡片最小宽度」（160–480 px）与「空位铺满整行」。"
-        + "每个看板各存一份，所以这里不放全局开关。");
+      .setDesc("在笔记里打开看板 → 视图右上角 ⚙ 里调，每个看板各存一份");
 
     /* R18：帮助（一栏 + 悬浮小窗） */
     helpRow(containerEl, "base");
@@ -8729,7 +8801,11 @@ KB.define("modules/automation", function () {
   function AutomationModule(plugin) {
     this.plugin = plugin;
     this.busy = new Set();
-    this.stats = { moved: 0, filled: 0, blocked: 0, center: 0, deferred: 0, refused: 0 };
+    this.stats = { moved: 0, filled: 0, blocked: 0, center: 0, deferred: 0, refused: 0,
+      patched: 0, kept: 0 };
+    /* R19：等 Templater 把模板整篇落盘之后，再补「文件位置」的等待时长（毫秒）。
+     * 做成实例字段 → 测试里设 0 就不用真等。 */
+    this.tplDeferMs = 800;
   }
   AutomationModule.prototype.onEnable = async function () {
     var P = KB.services;
@@ -9050,10 +9126,17 @@ KB.define("modules/automation", function () {
       /* 空白判定：剥掉 YAML 前言后正文只剩空白 → 才补；Templater 已注入 → 不碰 */
       var body = String(content).replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
       if (body.length > 0) return false;
-      /* R17：该目录已被 Templater 的「目录模板」接管 → 让路，不抢着写。
-       * 依据：Templater 只在「剥前言后正文为空」时才套它的模板，两个插件都写必互相覆盖。 */
+      /* R17：该目录已被 Templater 的「目录模板」接管 → **正文**让路，不抢着写。
+       * 依据：Templater 只在「剥前言后正文为空」时才套它的模板，两个插件都写必互相覆盖。
+       * R19（boss 第 1 条）：「让路」不等于撒手 —— note-locator 时代新笔记默认就带
+       * 「文件位置」属性，在属性面板里点一下就把它发到对应目录；让路之后这一项没人补，
+       * 功能就整个消失了。所以改成：正文让给 Templater，本插件只补「文件位置」这一个键。 */
       var TPL = KB.services.templates;
-      if (TPL.templaterFolderRule(app, parentPath)) { this.stats.deferred++; return false; }
+      if (TPL.templaterFolderRule(app, parentPath)) {
+        this.stats.deferred++;
+        this.patchLocationKey(file);
+        return false;
+      }
       var tpl = await this.pickTemplate(file, parentPath);
       /* R17：模板含 Templater 语法 → 先求值再落盘；求不到就拒写（宁可空着，不写脏数据） */
       var made = await TPL.materialize(app, tpl.file, file, tpl.text, this.ctxFor(file, parentPath));
@@ -9065,6 +9148,51 @@ KB.define("modules/automation", function () {
       this.stats.filled++;
       return true;
     } catch (e) { console.error("[kb-toolkit] 创建补全失败", file && file.path, e); return false; }
+  };
+  /**
+   * R19 需求1：给「已被 Templater 接管的目录」里的新笔记补上「文件位置」属性。
+   *
+   * 为什么单独走一条路：Templater 是**整篇落盘**（含前言），所以这里
+   *   ① 先等它写完（this.tplDeferMs，实例字段 → 测试设 0 就不用真等）；
+   *   ② 再拿 fileManager.processFrontMatter **原子**地只加这一个键 —— 只加不覆盖，
+   *      已有就跳过（幂等），因此永远不会把 Templater 写进去的内容冲掉；
+   *   ③ 值**留空**：路由判定是「文件位置非空 → 以它为准；为空 → 按标签归位」，
+   *      要是填成当前目录，新笔记会原地不动、不再按标签归位 —— 那不是旧插件的行为。
+   *
+   * 效果：属性面板里从此有「文件位置」这一行，点开即是我们补的候选值下拉；
+   * 选一个目录 → 文件自动搬过去，并同步更新 YAML 与尾部双链。
+   */
+  AutomationModule.prototype.patchLocationKey = async function (file) {
+    var self = this;
+    var S = this.plugin.settings;
+    if (!file || file.extension !== "md") return false;
+    if (S.automation && S.automation.writeBack === false) return false;   /* 关掉写回就不碰前言 */
+    var app = this.plugin.app;
+    if (!app || !app.fileManager || typeof app.fileManager.processFrontMatter !== "function") return false;
+    var key = (S.automation && S.automation.property) || "文件位置";
+    try {
+      if (this.tplDeferMs) {
+        await new Promise(function (res) { setTimeout(res, self.tplDeferMs); });
+      }
+      /* 等这段时间里文件可能已被改名/删除 → 按路径重新取一次 */
+      var af = file;
+      if (app.vault.getAbstractFileByPath) {
+        var re = app.vault.getAbstractFileByPath(file.path);
+        if (re) af = re;
+      }
+      var cache = (app.metadataCache && app.metadataCache.getFileCache)
+        ? app.metadataCache.getFileCache(af) : null;
+      var fm = cache && cache.frontmatter;
+      if (fm && Object.prototype.hasOwnProperty.call(fm, key)) {
+        this.stats.kept = (this.stats.kept || 0) + 1;
+        return false;                       /* 已经有了（Templater 模板自带）→ 不碰 */
+      }
+      await app.fileManager.processFrontMatter(af, function (o) {
+        if (!Object.prototype.hasOwnProperty.call(o, key)) o[key] = "";
+      });
+      this.stats.patched = (this.stats.patched || 0) + 1;
+      return true;
+    } catch (e) { this.stats.blocked++; return false; }
   };
 
   /* ================= R8：一键补全（扫描全库 → 批量补 YAML / 尾部双链） ================= */

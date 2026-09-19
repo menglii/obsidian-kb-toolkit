@@ -4,7 +4,11 @@ KB.define("modules/automation", function () {
   function AutomationModule(plugin) {
     this.plugin = plugin;
     this.busy = new Set();
-    this.stats = { moved: 0, filled: 0, blocked: 0, center: 0, deferred: 0, refused: 0 };
+    this.stats = { moved: 0, filled: 0, blocked: 0, center: 0, deferred: 0, refused: 0,
+      patched: 0, kept: 0 };
+    /* R19：等 Templater 把模板整篇落盘之后，再补「文件位置」的等待时长（毫秒）。
+     * 做成实例字段 → 测试里设 0 就不用真等。 */
+    this.tplDeferMs = 800;
   }
   AutomationModule.prototype.onEnable = async function () {
     var P = KB.services;
@@ -325,10 +329,17 @@ KB.define("modules/automation", function () {
       /* 空白判定：剥掉 YAML 前言后正文只剩空白 → 才补；Templater 已注入 → 不碰 */
       var body = String(content).replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
       if (body.length > 0) return false;
-      /* R17：该目录已被 Templater 的「目录模板」接管 → 让路，不抢着写。
-       * 依据：Templater 只在「剥前言后正文为空」时才套它的模板，两个插件都写必互相覆盖。 */
+      /* R17：该目录已被 Templater 的「目录模板」接管 → **正文**让路，不抢着写。
+       * 依据：Templater 只在「剥前言后正文为空」时才套它的模板，两个插件都写必互相覆盖。
+       * R19（boss 第 1 条）：「让路」不等于撒手 —— note-locator 时代新笔记默认就带
+       * 「文件位置」属性，在属性面板里点一下就把它发到对应目录；让路之后这一项没人补，
+       * 功能就整个消失了。所以改成：正文让给 Templater，本插件只补「文件位置」这一个键。 */
       var TPL = KB.services.templates;
-      if (TPL.templaterFolderRule(app, parentPath)) { this.stats.deferred++; return false; }
+      if (TPL.templaterFolderRule(app, parentPath)) {
+        this.stats.deferred++;
+        this.patchLocationKey(file);
+        return false;
+      }
       var tpl = await this.pickTemplate(file, parentPath);
       /* R17：模板含 Templater 语法 → 先求值再落盘；求不到就拒写（宁可空着，不写脏数据） */
       var made = await TPL.materialize(app, tpl.file, file, tpl.text, this.ctxFor(file, parentPath));
@@ -340,6 +351,51 @@ KB.define("modules/automation", function () {
       this.stats.filled++;
       return true;
     } catch (e) { console.error("[kb-toolkit] 创建补全失败", file && file.path, e); return false; }
+  };
+  /**
+   * R19 需求1：给「已被 Templater 接管的目录」里的新笔记补上「文件位置」属性。
+   *
+   * 为什么单独走一条路：Templater 是**整篇落盘**（含前言），所以这里
+   *   ① 先等它写完（this.tplDeferMs，实例字段 → 测试设 0 就不用真等）；
+   *   ② 再拿 fileManager.processFrontMatter **原子**地只加这一个键 —— 只加不覆盖，
+   *      已有就跳过（幂等），因此永远不会把 Templater 写进去的内容冲掉；
+   *   ③ 值**留空**：路由判定是「文件位置非空 → 以它为准；为空 → 按标签归位」，
+   *      要是填成当前目录，新笔记会原地不动、不再按标签归位 —— 那不是旧插件的行为。
+   *
+   * 效果：属性面板里从此有「文件位置」这一行，点开即是我们补的候选值下拉；
+   * 选一个目录 → 文件自动搬过去，并同步更新 YAML 与尾部双链。
+   */
+  AutomationModule.prototype.patchLocationKey = async function (file) {
+    var self = this;
+    var S = this.plugin.settings;
+    if (!file || file.extension !== "md") return false;
+    if (S.automation && S.automation.writeBack === false) return false;   /* 关掉写回就不碰前言 */
+    var app = this.plugin.app;
+    if (!app || !app.fileManager || typeof app.fileManager.processFrontMatter !== "function") return false;
+    var key = (S.automation && S.automation.property) || "文件位置";
+    try {
+      if (this.tplDeferMs) {
+        await new Promise(function (res) { setTimeout(res, self.tplDeferMs); });
+      }
+      /* 等这段时间里文件可能已被改名/删除 → 按路径重新取一次 */
+      var af = file;
+      if (app.vault.getAbstractFileByPath) {
+        var re = app.vault.getAbstractFileByPath(file.path);
+        if (re) af = re;
+      }
+      var cache = (app.metadataCache && app.metadataCache.getFileCache)
+        ? app.metadataCache.getFileCache(af) : null;
+      var fm = cache && cache.frontmatter;
+      if (fm && Object.prototype.hasOwnProperty.call(fm, key)) {
+        this.stats.kept = (this.stats.kept || 0) + 1;
+        return false;                       /* 已经有了（Templater 模板自带）→ 不碰 */
+      }
+      await app.fileManager.processFrontMatter(af, function (o) {
+        if (!Object.prototype.hasOwnProperty.call(o, key)) o[key] = "";
+      });
+      this.stats.patched = (this.stats.patched || 0) + 1;
+      return true;
+    } catch (e) { this.stats.blocked++; return false; }
   };
 
   /* ================= R8：一键补全（扫描全库 → 批量补 YAML / 尾部双链） ================= */

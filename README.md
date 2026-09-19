@@ -28,11 +28,12 @@
 
 > 想试又不想动自己的库：用仓库里的 `samples/示例库.zip`，解压成一个全新的 vault 直接用（只含空 PARA 结构 + 两个示例 `.base`，没有你的任何笔记）。
 
-## 设置页怎么走（R18 起，排版照《设置页排版方案v3》）
+## 设置页怎么走（R19 起：R18 排版 + 五条细化）
 
 页头是标题 + 右上角版本号；下面一行是三个标签 —— **知识库 / 笔记 / Base**，标签上的小圆点就是该模块的开关状态（彩色 = 开，灰色 = 关），这一行最右端是「日志」（打开最近一篇操作日志）与「关于」。
 标签下面是**整行的搜索框**：输入关键字即时筛选，**命中别的标签页不会把你拽走**，而是给一条提示「当前页无命中，其他页：「笔记」N 处」—— 点它才跳过去。
-每个标签页里：模块标题 + 滑动开关 → 一条短横 → 状态行（文字右边一个 ⓘ，悬停看「下一步」）→ 几个栏目（**卡片外一个小标签 + 卡片本体，卡片里每项一行**）→ 底部一栏「帮助」（**点开是一个可上下滑动的小窗**，本页所有说明都收在里面，一条一行）。
+每个标签页里：模块标题 + 滑动开关（外面带一圈细框）→ 一条短横 → **独立一栏「当前状态」**（一行主状态 + 一句短说明 + 行尾「详情 ›」；**整栏可以点**，点开是一个悬浮窗，里面把该模块的实时状态逐条列出来）→ 几个栏目（**卡片外一个小标签 + 卡片本体，卡片里每项一行**）→ 底部一栏「帮助」（**点开是一个可上下滑动的小窗**，本页所有说明都收在里面，一条一行）。
+栏目里的按钮**一律素色**（不再有紫底 / 红底）；唯一保留警示红的是页头那条「旧插件仍在启用」横幅的「全部停用」。
 「高级」折叠组默认收起，里面是低频道项（路径 / 模板与规则 / 看板显示项）。
 
 > 看板的「卡片宽度」与「空位铺满整行」是**视图级**选项（存在 `.base` 的视图块里、跟着笔记走），所以在设置页只给指路说明 —— 到笔记里打开看板，从视图右上角 ⚙ 调。
@@ -122,7 +123,11 @@
 > - **Templater 模板**（正文含 `<% %>` / `<%* %>`）→ 先把模板交给 Templater 求值，拿到成品再写。
 >   求不到值（Templater 没装 / 报错）就**跳过不动手**并提示你 —— 宁可不补，也不会把模板语法写进笔记。
 > - **目录已被 Templater 的「目录模板」接管**（Templater 设置里配了该目录，且开着「新建文件触发」）→
->   这篇新笔记整个让给 Templater，本插件不插手（避免两边互相覆盖）。
+>   **正文**整个让给 Templater，本插件不插手（避免两边互相覆盖）；但**属性照补** ——
+>   只往前言里加上「文件位置」这一个键（**只加不覆盖**，已有就跳过；值**留空**）。
+>   这样新笔记一落地，属性面板里就有这一行，点它选一个目录，笔记就会自动搬过去，
+>   并同步更新 YAML 与尾部双链。留空是有意的：路由判定是「文件位置非空则以它为准，为空才按标签归位」，
+>   填成当前目录反而会把「按标签归位」这条路掐死。关掉「写回笔记」开关则完全不碰前言。
 
 **套用规则**：可以指定「哪个文件夹下 / 哪个标签下的新笔记用哪套模板」。命中优先级：
 
@@ -194,19 +199,38 @@
 ```bash
 NODE="<node>"; export NODE_PATH="<node_modules>"
 cd .obsidian/plugins/kb-toolkit
-"$NODE" scripts/build.js                 # → main.js + styles.css
-for t in r1 r2 r3 r3b r4 r4b r5 r6 r7 r8; do "$NODE" tests/run_$t.js; done
+"$NODE" scripts/build.js          # → main.js + styles.css
+"$NODE" tests/run_all.js 3        # 全套 22 个套件 × 3 轮
 ```
 
-测试跑的是**构建产物** `main.js`，改过 `src/` 必须先 build。全套断言用 stub obsidian（覆 `Module._load`）+ jsdom，**全离线**，期望值从真实文件/配置动态推算。743 断言 / 失败 0。
+测试跑的是**构建产物** `main.js`，改过 `src/` 必须先 build。全套断言用 stub obsidian（覆 `Module._load`）+ jsdom，**全离线**，期望值从真实文件/配置动态推算。当前 **1233 断言 / 每轮 0 失败**（`run_all.js 3` → 3699）。
 
-重建的执行/回滚还必须过**真文件沙盒**（六场景 × 两遍，真 fs 的 `renameSync`/`rmSync`）：
+重建的执行/回滚还必须过**真文件沙盒**（真 fs 的 `renameSync`/`rmSync`），以及把真库整棵拷进工作区再演一遍：
 
 ```bash
-"$NODE" ../../../.workbuddy/tmp/sandbox_r4b/run.js      # 171 断言 / 失败 0
+"$NODE" ../../../.workbuddy/tmp/sandbox_r4b/run.js     # 229 断言 / 失败 0
+python ../../../.workbuddy/tmp/preplay_lab.py          # 真库副本 247 断言 / 失败 0
 ```
 
 jsdom 桩的 `delete` 不看 `force`、`rename` 不校验父目录，会盖住「目录非空删不掉」「收容目标父目录不存在」这类错 —— 只有真文件沙盒抓得到。
+
+## 版本库与提交
+
+仓库：**https://github.com/menglii/obsidian-kb-toolkit**（私有）。仓库根 = 本插件目录 —— **不要**在 vault 根 `git init`。
+
+一次改动的最小提交路径：
+
+```bash
+"$NODE" scripts/build.js          # 1) 先重建，产物必须与 src/ 同步
+"$NODE" tests/run_all.js 3        # 2) 全绿再提交
+git add -A                        # 3) main.js / styles.css 一起进（它们故意纳入版本库）
+git commit -m "..." && git push
+```
+
+两条本机约束：
+
+- **远端只走 SSH**（`git@github.com:...`）：本机 HTTPS 走代理会被 502，`gh` CLI 也没装。
+- 本机全局 `core.autocrlf=true` → `.gitattributes` 里 `* text=auto eol=lf` 压住它，否则签出时全部源码被静默改写成 CRLF。新增由脚本以 CRLF 生成的文件时，记得补一条 `-text`。
 
 ## 目录结构
 
@@ -215,12 +239,12 @@ kb-toolkit/
 ├── main.js / styles.css     # 构建产物，勿手改
 ├── manifest.json / versions.json
 ├── README.md / CHANGELOG.md / AGENTS.md
-├── src/                     # 19 个源文件（00_prelude → 90_entry）
+├── src/                     # 20 个源文件（00_prelude → 90_entry）
 ├── vendor/                  # creation-board.js / bases-preview.js（字节级内嵌，勿改）
 ├── styles_src/              # 样式权威源
 ├── scripts/                 # build.js + 审计脚本
 ├── samples/                 # 示例库 zip
-└── tests/                   # run_r1~r8 + stub_obsidian.js
+└── tests/                   # run_r1~r19（22 套件）+ stub_obsidian.js + run_all.js
 ```
 
 ## FAQ

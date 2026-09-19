@@ -369,9 +369,14 @@ function makeApp() {
     /* 真机里 trashFile 按 trashOption 分流到系统回收站/本地 .trash/永久删；桩等价于删除并记账 */
     async trashFile(file) { trashed.push(file.path); return vault.delete(file, true); },
     async processFrontMatter(file, fn) {
-      /* 简化桩：frontmatter 以对象形式挂在 file.fm 上，fn 就地改 */
+      /* 简化桩：frontmatter 以对象形式挂在 file.fm 上，fn 就地改。
+       * R19：真机里 processFrontMatter 落盘后 metadataCache 马上就能读到新前言，
+       * 桩必须跟上 —— 否则「该键已存在就跳过」这类幂等判断在测试里永远不成立
+       * （getFileCache 读的是 cache.frontmatter，而这里只写 fm，两边不连通）。 */
       file.fm = file.fm || {};
       fn(file.fm);
+      file.cache = file.cache || {};
+      file.cache.frontmatter = Object.assign({}, file.cache.frontmatter || {}, file.fm);
     },
     async renameFile(file, newPath) {
       newPath = normalizePath(newPath);

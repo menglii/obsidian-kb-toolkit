@@ -1367,17 +1367,29 @@
   margin: 9px 0 10px 2px;
 }
 
-/* ---- 开关改滑动长条（boss：不要打勾形式） ---- */
-.kbt-switch { align-items: center; }
+/* ---- 开关改滑动长条（boss：不要打勾形式） ----
+ * R19 修「小圆圈是歪的」：Obsidian 原生 :after 自带两条我们不想要的偏移 ——
+ *     margin: var(--toggle-s-border-width) 0 0 0;                 ← 把圆点往下推
+ *     transform: translate3d(var(--toggle-s-border-width), 0, 0);  ← 关闭态还把圆点往右推
+ * 旧实现只覆盖 top/left/width/height，没清掉这两条 → 圆点垂直不居中（贴底），
+ * 关闭态水平也偏。所以这里必须显式 margin:0 + transform:none；
+ * 并把容器与圆点都做成正圆（999px / 50%），圆角不够圆同样会被看成「歪」。 */
+.kbt-switch {
+  align-items: center;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 2px var(--size-4-2);
+}
 .kbt-switch .setting-item-name { font-weight: var(--font-medium); }
 .kbt-switch .checkbox-container {
   width: 38px;
   height: 21px;
-  border-radius: var(--radius-l);
+  border-radius: 999px;
   background: var(--background-modifier-border);
   border: none;
   box-shadow: none;
   position: relative;
+  margin: 0;
   transition: background-color .18s ease;
 }
 .kbt-switch .checkbox-container::after {
@@ -1385,15 +1397,18 @@
   position: absolute;
   top: 2px;
   left: 2px;
+  margin: 0;             /* 清掉原生 margin-top —— 歪的元凶之一 */
+  transform: none;       /* 清掉原生关闭态位移 —— 歪的元凶之二 */
   width: 17px;
   height: 17px;
-  border-radius: var(--radius-l);
+  border-radius: 50%;
   background: var(--background-primary);
+  box-shadow: none;
   transition: transform .18s ease, background-color .18s ease;
 }
 .kbt-switch .checkbox-container.is-enabled { background: var(--interactive-accent); opacity: .82; }
 .kbt-switch .checkbox-container.is-enabled::after {
-  transform: translateX(17px);
+  transform: translateX(17px);        /* 38 - 2 - 17 - 2 = 17 */
   background: var(--text-on-accent);
 }
 /* 兜底：有的主题不加 is-enabled，直接按 input 的勾选态来 */
@@ -1444,15 +1459,20 @@
 /* 手机端没有悬停 —— 提示统一走帮助小窗，不叠一层浮层 */
 @media (hover: none) { .kbt-info::after { display: none; } }
 
-/* ---- 状态行：素色（无 callout 背景），主行 + ⓘ 同一行 / 副行小字 ---- */
+/* ---- 状态行：R19 起 = 独立一栏（栏目名「当前状态」+ 卡片），整栏可点开悬浮窗看详情 ----
+ * 卡片底色沿用 .kbt-card，所以这里保持透明，只负责行内排版。
+ * 长说明不再铺在页面上（老板：说明文字各自成栏 + 点开悬浮窗看），副行只留一句短的。 */
 .kbt-status.callout {
   background: transparent;
   border: none;
   box-shadow: none;
   padding: 0;
-  margin: 0 0 var(--size-4-2);
+  margin: 0;
   font-size: var(--font-ui-small);
 }
+.kbt-sec.kbt-status-card { cursor: var(--cursor); }
+.kbt-sec.kbt-status-card > .kbt-card { transition: background-color .15s ease; }
+.kbt-sec.kbt-status-card:hover > .kbt-card { background: var(--background-modifier-hover); }
 .kbt-status .kbt-status-top {
   display: flex;
   align-items: center;
@@ -1469,6 +1489,13 @@
   line-height: 1.5;
 }
 .kbt-status .kbt-status-sub:empty { display: none; margin: 0; }
+/* 行尾那一小句「详情 ›」：提示整栏可点 */
+.kbt-status .kbt-status-more {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
 .kbt-inline-btn {
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
@@ -1509,8 +1536,13 @@
 }
 .kbt-card > p.setting-item-description:first-child { margin: var(--size-2-2) 0 0; }
 
-/* ---- 按钮：低饱和淡底（color-mix 上一行留主题色兜底，老版本退回素底） ---- */
-.kbt-card button:not(.mod-cta):not(.mod-warning):not(.kbt-inline-btn):not(.kbt-hint-link):not(.kbt-info) {
+/* ---- 按钮：统一素色 ----
+ * R19 需求4：boss 要去掉「生成预览报告」（紫底）/「执行 · 回滚」（红底）的彩色底，
+ * 改成与「打开向导」一样的素色按钮 → 于是 .mod-cta / .mod-warning 在栏内不再单开配色，
+ * 一并落进下面这条素色规则（页面里所有操作按钮都在 .kbt-card 内）。
+ * 例外：页头「旧插件收编」横幅保留警示底色 —— 它是提示横幅、不是操作按钮，
+ * 且它挂在 containerEl 下、不在 .kbt-card 内，天然不受这条规则影响。 */
+.kbt-card button:not(.kbt-inline-btn):not(.kbt-hint-link):not(.kbt-info) {
   background: var(--background-primary);
   box-shadow: none;
   border: 1px solid var(--background-modifier-border);
@@ -1518,17 +1550,9 @@
   font-size: var(--font-ui-smaller);
   white-space: nowrap;
 }
-.kbt-group .mod-cta,
-.kbt-card .mod-cta {
-  background: var(--background-secondary);
-  background: color-mix(in srgb, var(--color-purple) 26%, var(--background-primary));
-  box-shadow: none;
-  border: 1px solid var(--background-modifier-border);
-  border-color: color-mix(in srgb, var(--color-purple) 42%, var(--background-primary));
-  color: var(--text-accent);
+.kbt-card button:not(.kbt-inline-btn):not(.kbt-hint-link):not(.kbt-info):hover {
+  background: var(--background-modifier-hover);
 }
-.kbt-group .mod-warning,
-.kbt-card .mod-warning,
 .kb-legacy-banner .mod-warning {
   background: var(--background-secondary);
   background: color-mix(in srgb, var(--color-red) 22%, var(--background-primary));
@@ -1537,10 +1561,6 @@
   border-color: color-mix(in srgb, var(--color-red) 36%, var(--background-primary));
   color: var(--text-error);
 }
-.kbt-group .mod-cta:hover,
-.kbt-card .mod-cta:hover,
-.kbt-group .mod-warning:hover,
-.kbt-card .mod-warning:hover { background: var(--background-modifier-hover); }
 
 /* ---- 「高级」折叠组：summary 只有「高级」两字，箭头交给 CSS ---- */
 .kbt-adv { margin: 14px 0 0; }
@@ -1562,9 +1582,10 @@
 
 /* ---- 帮助（每页一栏 + 悬浮小窗） ---- */
 .kbt-help-row .setting-item-description { color: var(--text-faint); }
-/* 模块关着时整段置灰，但辅助栏与帮助栏必须还能点 */
+/* 模块关着时整段置灰，但辅助栏 / 帮助栏 / 状态栏必须还能点（状态栏是纯读数） */
 .kb-module-disabled .kbt-help-row { pointer-events: auto; opacity: 1; }
 .kb-module-disabled .kbt-sec.is-aux { pointer-events: auto; opacity: 1; }
+.kb-module-disabled .kbt-sec.kbt-status-card { pointer-events: auto; opacity: 1; }
 
 /* ---- 悬浮小窗（帮助 / 关于）：可上下滑动；条目一行一条 ---- */
 .kbt-pop {
@@ -1665,8 +1686,8 @@
   .kbt-card { padding: 2px var(--size-4-2); }
   .kbt-ghost-btn { min-height: 34px; }
   .kbt-card button { min-height: 36px; }
-  .kbt-switch .checkbox-container { width: 40px; height: 24px; }
-  .kbt-switch .checkbox-container::after { width: 18px; height: 18px; top: 3px; left: 3px; }
+  .kbt-switch .checkbox-container { width: 40px; height: 24px; border-radius: 999px; margin: 0; }
+  .kbt-switch .checkbox-container::after { width: 18px; height: 18px; top: 3px; left: 3px; border-radius: 50%; margin: 0; transform: none; }
   .kbt-switch .checkbox-container.is-enabled::after { transform: translateX(16px); }
   .kbt-switch .checkbox-container:has(input:checked)::after { transform: translateX(16px); }
   .kbt-info { width: 22px; height: 22px; min-width: 22px; font-size: var(--font-ui-small); }
@@ -1677,8 +1698,8 @@
   .kbt-hk { display: block; margin-bottom: 2px; }
 }
 /* Obsidian 移动端（body.is-mobile）：触控尺寸再放宽一点 */
-.is-mobile .kbt-switch .checkbox-container { width: 42px; height: 26px; }
-.is-mobile .kbt-switch .checkbox-container::after { width: 20px; height: 20px; top: 3px; left: 3px; }
+.is-mobile .kbt-switch .checkbox-container { width: 42px; height: 26px; border-radius: 999px; margin: 0; }
+.is-mobile .kbt-switch .checkbox-container::after { width: 20px; height: 20px; top: 3px; left: 3px; border-radius: 50%; margin: 0; transform: none; }
 .is-mobile .kbt-switch .checkbox-container.is-enabled::after { transform: translateX(16px); }
 .is-mobile .kbt-switch .checkbox-container:has(input:checked)::after { transform: translateX(16px); }
 .is-mobile .kbt-info { width: 24px; height: 24px; min-width: 24px; }

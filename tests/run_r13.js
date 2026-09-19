@@ -153,7 +153,7 @@ function cardByLabel(containerEl, label) {
     eq(coreRows.map(rowName).join(","), "预览报告,执行,回滚", "D3：行名即操作名，顺序即流程");
     eq(coreRows.map(el => rowBtn(el).text).join(","), "生成预览报告,执行,回滚", "D4：按钮文案");
     eq(coreRows.map(el => (rowBtn(el).cta ? "cta" : (rowBtn(el).warning ? "warn" : "-"))).join(","),
-      "cta,warn,warn", "D5：预览=主色（cta），执行/回滚=警示色（warning）—— 危险色只给危险动作");
+      "-,-,-", "D5：R19 三个按钮一律素色（去掉主色 / 警示底，改成与「打开向导」同款）");
 
     const auxCard = cardByLabel(tab.containerEl, "辅助");
     ok(!!auxCard && /操作日志/.test(auxCard.textContent || ""),

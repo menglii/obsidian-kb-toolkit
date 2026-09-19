@@ -124,7 +124,9 @@ function rowNames(card) {
   /* ---------- ④ 栏目 = 小标签 + 卡片 ---------- */
   {
     const secs = [...tab.containerEl.querySelectorAll(".kbt-sec")];
-    eq(secs.length, 9, "④ -1：9 个栏目（三页各 3 栏）");
+    eq(secs.length, 12, "④ -1：12 个栏目（R19 起三页各 4 栏 —— 多出「当前状态」栏）");
+    eq(secs.filter(s => s.classList.contains("kbt-status-card")).length, 3,
+      "④ -1b：三页各有一个「当前状态」栏（R19 需求3：状态独立成栏）");
     ok(secs.every(s => s.querySelector(":scope > .kbt-lb") && s.querySelector(":scope > .kbt-card")),
       "④ -2：每个栏目都是「小标签 + 卡片」两段（标签在卡片外）");
     ok(secs.every(s => !s.querySelector(".kbt-card > h5")),
@@ -204,9 +206,11 @@ function rowNames(card) {
     ok(/\.kbt-hrow\s*{[^}]*display:\s*flex/.test(css) && /\.kbt-hk\s*{\s*flex:\s*none/.test(css),
       "⑦ -8：帮助条目横排、键不换行");
     ok(/\.kbt-ghost-btns\s*{[^}]*margin-left:\s*auto/.test(css), "⑦ -9：两个入口靠右");
-    /* 淡底按钮：color-mix 上一行必须留一行主题色兜底（老版本退化成素底，不会变没底） */
-    const cm = css.match(/background:\s*var\(--background-secondary\);\s*background:\s*color-mix\(in srgb, var\(--color-purple\)/);
-    ok(!!cm, "⑦ -10：主按钮淡底有兜底行（color-mix 不被支持时退回 --background-secondary）");
+    /* R19 需求4：栏内按钮统一素色 → 不再有 cta 淡紫底；但「零裸色」这条底线不能松 */
+    ok(/\.kbt-card button:not\(\.kbt-inline-btn\)[^{]*\{[^}]*background:\s*var\(--background-primary\)/.test(css),
+      "⑦ -10：R19 按钮统一素色（底色走 --background-primary，零裸色不变）");
+    ok(css.indexOf(".kbt-card .mod-cta") < 0 && css.indexOf(".kbt-card .mod-warning") < 0,
+      "⑦ -11：栏内不再给 .mod-cta / .mod-warning 单开配色");
   }
 
   console.log("\nR18 结果: " + pass + " 通过 / " + fail + " 失败");

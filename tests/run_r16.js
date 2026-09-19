@@ -203,8 +203,9 @@ function findSettingEl(containerEl, name) {
       "G2：马卡龙三色取自主题色变量（薄荷/奶油/藕荷，不另造高饱和色）");
     ok(/\.kbt-switch \.checkbox-container\.is-enabled\s*{[^}]*var\(--interactive-accent\)/.test(kbt),
       "G3：滑块开态用主题强调色（降饱和：opacity）");
-    ok(/\.kbt-group \.mod-cta,[\s\S]*?\.kbt-card \.mod-cta\s*{[\s\S]*?color-mix\(in srgb, var\(--color-purple\)/.test(kbt),
-      "G4：主按钮降饱和为淡紫底（color-mix 调主题色，上一行留主题色兜底，零裸色）");
+    ok(/\.kbt-card button:not\(\.kbt-inline-btn\):not\(\.kbt-hint-link\):not\(\.kbt-info\)\s*{[\s\S]*?background:\s*var\(--background-primary\)/.test(kbt)
+      && kbt.indexOf(".kbt-card .mod-cta") < 0 && kbt.indexOf(".kbt-card .mod-warning") < 0,
+      "G4：R19 栏内按钮统一素色（.mod-cta / .mod-warning 不再单开配色；横幅的警示底不受影响）");
     ok(/\.kbt-status\.callout\s*{[\s\S]*?background:\s*transparent/.test(kbt),
       "G5：状态行去掉 callout 背景（素色，只留两行字）");
     ok(/\.kbt-rule\s*{[\s\S]*?width:\s*26px/.test(kbt), "G6：短横只占左边一小条（26px）");
