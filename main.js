@@ -146,6 +146,7 @@ const K_DUP = "允许重复";
 const K_CATCH = "显示收容所";
 const K_WIDTH = "卡片最小宽度";
 const K_FILL = "空位铺满整行";   // R15：默认开（R14 行为，1fr 撑满）；关 = 卡片固定为滑杆宽度
+const K_SEC_W = "文件宽度";      // R25：**板块级**卡片最小宽度（写在「板块」项里，不是视图配置）；不写 = 继承 K_WIDTH
 const K_PROPS = "显示属性";     // 字符串（逗号分隔）；空 → 每篇前言前 5 个用户属性
 const K_PROS_OPEN = "属性默认展开";  // R9 键（卡片 / 就地编辑浮层里的属性区是否默认展开，默认 true）；R23 起控件在顶栏面板「看板行为」组；R24 起**板块可各自覆盖**（右键板块 → 通用设置）
 const K_BODY = "显正文";        // boolean；板块未单独指定时的默认
@@ -588,7 +589,7 @@ function gearIcon(parent) {
 const KNOWN_KEYS = ["名称", "name", "数据源", "source", "路径", "path", "标签", "tag",
   "公式", "formula", "上限", "limit", "递归深度", "depth",
   "属性", "显正文", "显示 YAML", "显示结尾双链", "属性展开", "拖动搬文件", "排序", "sort",
-  "propsOpen"];
+  "propsOpen", "文件宽度"];
 
 /** R12：三态字段（true / false / null=继承视图默认）的容错解析 */
 function tri(o, zhKey, enKey) {
@@ -596,6 +597,15 @@ function tri(o, zhKey, enKey) {
   if (v === true || v === "true") return true;
   if (v === false || v === "false") return false;
   return null;
+}
+
+/** R25：板块级「文件宽度」容错解析 —— 空 / 非数 → null（= 继承视图默认的 K_WIDTH）；
+ *  有值 → 夹到 160–480 并对齐到 10 的整数（跟视图形级那条拉杆同一档）。 */
+function secWidth(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = parseFloat(v);
+  if (!isFinite(n) || n <= 0) return null;   // 0 / 负数 = 没设（别夹成 160 —— 那是「显式设成最小」）
+  return Math.max(160, Math.min(480, Math.round(n / 10) * 10));
 }
 
 function normalizeSection(raw, i) {
@@ -623,6 +633,7 @@ function normalizeSection(raw, i) {
     yaml: tri(o, "显示 YAML", "yaml"),      // R12：null=继承视图；true=保留 YAML 前言
     links: tri(o, "显示结尾双链", "links"), // R12：null=继承视图；false=掐掉结尾「关联笔记」段
     propsOpen: tri(o, "属性展开", "propsOpen"), // R24：null=继承视图；true/false = 本板块属性区默认展开/折叠
+    secW: secWidth(o[K_SEC_W] !== undefined ? o[K_SEC_W] : o.secWidth), // R25：null=继承视图的 K_WIDTH
     sort: str(o[K_SORT] !== undefined ? o[K_SORT] : o.sort),   // "" = 沿用 base 顺序
     extra: {},
   };
@@ -648,6 +659,7 @@ function sectionToRaw(sec) {
   if (sec.yaml === true || sec.yaml === false) o["显示 YAML"] = sec.yaml;
   if (sec.links === true || sec.links === false) o["显示结尾双链"] = sec.links;
   if (sec.propsOpen === true || sec.propsOpen === false) o["属性展开"] = sec.propsOpen;
+  if (sec.secW !== null && sec.secW !== undefined) o[K_SEC_W] = sec.secW;   // R25
   if (sec.sort) o[K_SORT] = sec.sort;
   const ex = sec.extra || {};
   for (const k of Object.keys(ex)) if (!Object.prototype.hasOwnProperty.call(o, k)) o[k] = ex[k];
@@ -1571,6 +1583,15 @@ class CreationBoardView extends BasesViewBase {
 
   renderSection(parentEl, sec) {
     const wrap = parentEl.createDiv({ cls: "cb-section" });
+    sec.__wrapEl = wrap;      // R25：菜单里拖拉杆要直写这个板块的变量
+    /* R25（boss：单个板块内文件宽度）：把 CSS 变量写到 .cb-section 上 —— 后代 .cb-grid
+       走 var(--cb-card-w) 自然继承（子板块也在这块里，跟着一起变）。
+       没覆盖就**一个字都不写**，保持整板默认（别把继承值写成硬值，否则改看板拉不动它）。 */
+    const sw0 = this.secWidthOf(sec);
+    if (sw0 !== null) {
+      wrap.style.setProperty("--cb-card-w", sw0 + "px");
+      if (!this.optBool(K_FILL, true)) wrap.style.setProperty("--cb-card-max", sw0 + "px");
+    }
     const collapsed = this.isCollapsed(sec, null, false);
 
     const head = wrap.createDiv({ cls: "cb-section-head" });
@@ -1654,6 +1675,7 @@ class CreationBoardView extends BasesViewBase {
     const body = wrap.createDiv({ cls: "cb-section-body" });
 
     const grid = body.createDiv({ cls: "cb-grid" });
+    sec.__gridEl = grid;      // R25：右键菜单「新建文件」要把临时卡片插进这块的栅格
     /* 第 12 轮：板块三角只折「自己这一层的笔记」（老板：收起后别把下面的子栏目一起带走）。
        折叠态落在 grid 上，子板块（.cb-sub）在外面，各自管各自的折叠 */
     if (collapsed) grid.addClass("is-collapsed");
@@ -2150,6 +2172,13 @@ class CreationBoardView extends BasesViewBase {
     return -1;
   }
 
+  /** R25：这个板块自己的「文件宽度」（null = 跟随看板那条拉杆） */
+  secWidthOf(sec) {
+    const s = (sec && sec.spec) || null;
+    if (!s) return null;
+    return secWidth(s.secW);
+  }
+
   /** 这个板块有没有「板块级覆盖」（决定「重置设置」是否可点） */
   secHasOverride(i) {
     const s = this.secs[i];
@@ -2158,6 +2187,7 @@ class CreationBoardView extends BasesViewBase {
       || s.yaml === true || s.yaml === false
       || s.links === true || s.links === false
       || s.propsOpen === true || s.propsOpen === false
+      || (s.secW !== null && s.secW !== undefined)
       || (s.props && s.props.length > 0)
       || !!s.sort;
   }
@@ -2170,6 +2200,7 @@ class CreationBoardView extends BasesViewBase {
     s.yaml = null;
     s.links = null;
     s.propsOpen = null;
+    s.secW = null;
     s.props = [];
     s.sort = "";
     this.saveState = "已重置「" + s.name + "」（回继承视图默认）";
@@ -2240,9 +2271,10 @@ class CreationBoardView extends BasesViewBase {
       this.closeSecMenu();
       try { fn(); } catch (e) {}
     };
-    const item = (label, fn, disabled) => {
+    const item = (label, fn, disabled, tip) => {
       const el = menu.createDiv({ cls: "cb-ctx-item" + (disabled ? " is-disabled" : "") });
       el.setAttr("data-act", label);
+      if (tip) el.setAttr("title", tip);
       el.setText(label);
       if (disabled) {
         el.setAttr("aria-disabled", "true");
@@ -2308,6 +2340,86 @@ class CreationBoardView extends BasesViewBase {
         });
       }
     };
+    /** R25（boss：右键菜单加「单个板块内文件宽度」）：**两行**
+     *  ①「文件宽度 [拉杆] NNN px」 ② 打勾项「跟随看板」
+     *  🔴 为什么不像顶栏「卡片」那行塞成一行：真引擎量过 —— 232px 的菜单里
+     *  「标签 + 拉杆 + px + 胶囊开关」最窄也要约 329px，硬塞会把菜单从 232 撑到
+     *  max-width 300（老板夸的就是这个窄窗，不能让它悄悄变宽）。拆两行后菜单宽度原样不动。
+     *  · 「跟随看板」勾上 = 不写覆盖（继承视图的 K_WIDTH），拉杆置灰（不做假控件）
+     *  · 不勾 = 拉杆生效，值写进本板块的「文件宽度」
+     *  · 拖动中只直写**这一个板块**的 CSS 变量（不动 DOM 树，跟视图级那一行一个思路） */
+    const wrowSec = (si2, secObj) => {
+      const viewW = num(this.optNum(K_WIDTH, 240), 240);
+      /* 当前是不是「跟随看板」—— 每次现算（secW 为空即跟随），菜单里不另存一份状态 */
+      const isFollow = () => this.secs[si2].secW === null;
+      const row = menu.createDiv({ cls: "cb-wrow cb-ctx-wrow" });
+      const lb = row.createSpan({ cls: "cb-wlb", text: "文件宽度" });
+      lb.setAttr("title", "只对「" + secName + "」：卡片最小宽度（160 – 480 px）");
+      const rg = row.createEl("input", { cls: "cb-wrange", type: "range" });
+      rg.setAttr("min", "160");
+      rg.setAttr("max", "480");
+      rg.setAttr("step", "10");
+      const W0 = this.secWidthOf(secObj);
+      rg.value = String(W0 !== null ? W0 : viewW);
+      const val = row.createSpan({ cls: "cb-wval", text: rg.value + " px" });
+      /* ②「跟随看板」= 用菜单里**已有的打勾项**语言（与「文件操作」那组同一套），不另造控件 */
+      const fk = menu.createDiv({ cls: "cb-ctx-item cb-ctx-chk cb-ctx-follow" });
+      fk.setAttr("data-key", "跟随看板");
+      fk.setAttr("title", "勾上 = 用看板「卡片」里那条宽度；不勾 = 这个板块单独设一个宽度");
+      const tick = fk.createSpan({ cls: "cb-ctx-tick", text: "" });
+      fk.createSpan({ cls: "cb-ctx-chk-lb", text: "跟随看板" });
+      /* ⚠️ 跟视图级那一行同一个坑：rg.value 是**字符串**，num() 只认 number，
+         直接喂会恒回默认值 → 这里用 parseFloat + isFinite 兜底。 */
+      const wnum2 = (v) => { const n = parseFloat(v); return isFinite(n) ? n : viewW; };
+      const pctOf2 = (v) => (((wnum2(v) - 160) / 320) * 100).toFixed(1) + "%";
+      const paint = () => {
+        const follow = isFollow();
+        rg.disabled = follow;                 /* 跟随看板时拉杆置灰（不做假控件） */
+        val.style.opacity = follow ? "0.4" : "1";
+        rg.style.setProperty("--cb-wpct", pctOf2(rg.value));
+        val.setText(rg.value + " px");
+        tick.setText(follow ? "✓" : "");
+      };
+      /* 菜单里的控件一律别把 mousedown / click 冒泡出去 —— 外层 closer 会把小窗收走 */
+      for (const el of [rg, fk]) {
+        el.addEventListener("mousedown", (evt) => evt.stopPropagation());
+        el.addEventListener("click", (evt) => evt.stopPropagation());
+      }
+      rg.addEventListener("input", () => {
+        val.setText(rg.value + " px");
+        rg.style.setProperty("--cb-wpct", pctOf2(rg.value));
+        /* 拖动中即时生效：只写这一个板块的 CSS 变量 */
+        const we = secObj.__wrapEl;
+        if (we) {
+          const wpx = wnum2(rg.value) + "px";
+          we.style.setProperty("--cb-card-w", wpx);
+          if (!this.optBool(K_FILL, true)) we.style.setProperty("--cb-card-max", wpx);
+        }
+      });
+      rg.addEventListener("change", () => {
+        const n = Math.max(160, Math.min(480, Math.round(wnum2(rg.value) / 10) * 10));
+        this.secs[si2].secW = n;
+        this.saveState = "「" + secName + "」文件宽度 → " + n + " px";
+        this.afterChange();
+        this.closeSecMenu();
+      });
+      fk.addEventListener("click", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        if (isFollow()) {                    /* 勾 → 不勾：把当前拉杆值写成这一块的覆盖 */
+          const n = Math.max(160, Math.min(480, Math.round(wnum2(rg.value) / 10) * 10));
+          this.secs[si2].secW = n;
+          this.saveState = "「" + secName + "」文件宽度 → " + n + " px";
+        } else {                             /* 不勾 → 勾：删掉覆盖，回继承看板 */
+          this.secs[si2].secW = null;
+          this.saveState = "「" + secName + "」文件宽度 → 跟随看板";
+        }
+        this.afterChange();
+        this.closeSecMenu();
+      });
+      paint();
+      return row;
+    };
     /** 「文件操作」那组是**视图级**的 → 用 Windows 那种打勾项，不用三态（免得冒充板块级） */
     const chk = (label, key, dflt, tip) => {
       const el = menu.createDiv({ cls: "cb-ctx-item cb-ctx-chk" });
@@ -2333,6 +2445,7 @@ class CreationBoardView extends BasesViewBase {
       grp("通用设置", "只对「" + secName + "」");
       triRow("属性展开", "propsOpen", this.propsOpenDefault(), "卡片 / 就地编辑浮层里的属性区默认展开");
       triRow("内容展开", "body", this.viewBodyDefault(), "＝原来的「显正文」；关 = 只显示标题与属性");
+      wrowSec(si, sec);   // R25：板块级「文件宽度」（跟随看板 = 不写覆盖）
       const has = this.secHasOverride(si);
       item(has ? "重置设置" : "重置设置（已是默认）", () => this.resetSection(si), !has);
       let helpOpen = false;
@@ -2342,8 +2455,10 @@ class CreationBoardView extends BasesViewBase {
         helpOpen = !helpOpen;
         helpBox.toggleClass("is-hidden", !helpOpen);
         helpBox.setText("「" + secName + "」：数据源 " + (sec.spec.source || "") + "，"
-          + "三态项（继承 / 开 / 关）只改这一块；双击板块名可改名，拖动标题可排序；"
-          + "「文件操作」那组是整个看板共用的。");
+          + "三态项（继承 / 开 / 关）与「文件宽度」都只改这一块；"
+          + "双击板块名可改名，拖动标题可排序；"
+          + "「本板块」组里的新建文件 / 删除也只动这一块，"
+          + "「新建板块」与「文件操作」是整个看板共用的。");
       });
 
       menu.createDiv({ cls: "cb-ctx-sep" });
@@ -2354,6 +2469,73 @@ class CreationBoardView extends BasesViewBase {
       menu.createDiv({ cls: "cb-ctx-note", text: sec && sec.native
         ? "「自动分组」的板块不能单独设置（名字与分组都是看板配置算出来的）"
         : "这个板块不支持单独设置" });
+    }
+
+    /* R25（boss：右键菜单里新增 新建文件 / 删除板块 / 新建板块）。
+       分两组写，就是为了让**作用范围一眼可见**（R24 立的那条规矩）：
+       「本板块」= 新建文件、删除；「看板」= 新建板块。 */
+    if (canSec) {
+      menu.createDiv({ cls: "cb-ctx-sep" });
+      grp("本板块", "只对「" + secName + "」");
+      item("新建文件", () => this.createInSection(sec, "", sec.__gridEl), this.readonly(),
+        "在这个板块里新建一篇空笔记（落点按数据源算；空文件交给 Templater 目录模板）");
+      /* 删除：两下确认 —— 第一下只把这一项变成「再点一次」，**不收起小窗**（收起了就没法点第二下） */
+      let armed = false;
+      const del = menu.createDiv({ cls: "cb-ctx-item cb-ctx-danger" });
+      del.setAttr("data-act", "删除板块");
+      del.setText("删除「" + secName + "」");
+      del.setAttr("title", "只从这个看板的板块配置里删掉它，笔记一篇都不动（再点一次才真删）");
+      del.addEventListener("mousedown", (evt) => evt.stopPropagation());
+      del.addEventListener("click", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        if (!armed) {
+          armed = true;
+          del.setText("再点一次确认删除");
+          del.addClass("is-armed");
+          return;
+        }
+        const nm = this.deleteSection(si);
+        this.closeSecMenu();
+        if (nm) {
+          try {
+            new obsidian.Notice("创作看板：已删除板块「" + nm + "」（笔记一篇没动）");
+          } catch (e) {}
+        }
+      });
+    }
+
+    /* R25：新建板块（整个看板）—— 4 个数据源按钮，跟顶栏面板「＋ 添加」同一套 ADDABLE */
+    menu.createDiv({ cls: "cb-ctx-sep" });
+    /* 组标题**就是**这一项的标签 —— 232px 的菜单里塞不下「新建板块 + 4 个数据源按钮」一行 */
+    grp("新建板块", "整个看板");
+    const addRow = menu.createDiv({ cls: "cb-ctx-addrow" });
+    if (this.readonly()) {
+      addRow.createSpan({ cls: "cb-ctx-addrow-note", text: "只读模式：先点工具条 ✎" });
+    } else {
+      for (const t of ADDABLE) {
+        const b = addRow.createEl("button", { cls: "cb-add-type", text: SOURCE_LABEL[t] });
+        b.setAttr("type", "button");
+        b.setAttr("data-type", t);
+        b.setAttr("title", "加一个「" + SOURCE_LABEL[t] + "」板块；加完就地翻开顶栏「板块」面板那一行选目录 / 标签");
+        b.addEventListener("mousedown", (evt) => evt.stopPropagation());
+        b.addEventListener("click", (evt) => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          const idx = this.addSection(t);
+          this.closeSecMenu();
+          if (typeof idx === "number" && idx >= 0) {
+            /* 「新建」之后紧接着就是「配置」—— 翻开顶栏面板并展开新板块那一行 */
+            this.panelOpen = true;
+            this.addOpen = false;
+            this.editIdx = idx;
+            this.renderPanel();
+            try {
+              new obsidian.Notice("创作看板：已新建「" + SOURCE_LABEL[t] + "」板块 —— 在「板块」面板里选目录 / 标签");
+            } catch (e) {}
+          }
+        });
+      }
     }
 
     menu.createDiv({ cls: "cb-ctx-sep" });
@@ -4502,9 +4684,9 @@ class CreationBoardView extends BasesViewBase {
       new Notice("收容所只能有一个");
       this.addOpen = false;
       this.renderPanel();
-      return;
+      return -1;
     }
-    const base = { name: "新板块", source: type, rawSource: type, path: "", tag: "", formula: "", limit: 50, depth: 1, props: [], body: null, propsOpen: null, extra: {} };
+    const base = { name: "新板块", source: type, rawSource: type, path: "", tag: "", formula: "", limit: 50, depth: 1, props: [], body: null, propsOpen: null, secW: null, extra: {} };
     if (type === "catchall") base.name = "其它";
     if (type === "formula") {
       const names = this.collectFormulas();
@@ -4518,6 +4700,7 @@ class CreationBoardView extends BasesViewBase {
     this.addOpen = false;
     this.editIdx = idx;
     this.afterChange();
+    return idx;      // R25：右键菜单拿它去翻开顶栏面板对应那一行
   }
 
   askDelete(i) {
@@ -4539,10 +4722,22 @@ class CreationBoardView extends BasesViewBase {
       this.confirmTimer = null;
     }
     this.confirmIdx = -1;
+    this.deleteSection(i);
+  }
+
+  /** R25（boss：右键菜单「删除板块」）：真的删掉第 i 个板块（只动看板配置，不碰任何笔记）。
+   *  面板那两下确认（askDelete）与右键菜单都走这里 —— 删板块的 splice 逻辑只有一份。 */
+  deleteSection(i) {
+    const s = this.secs[i];
+    if (!s) return null;
+    const name = s.name;
     this.secs.splice(i, 1);
     if (this.editIdx === i) this.editIdx = -1;
     else if (this.editIdx > i) this.editIdx--;
+    this.saveState = "已删除板块「" + name + "」"
+      + (this.secs.length === 0 ? "（板块清零 → 看板回退成 base 的自动分组）" : "");
     this.afterChange();
+    return name;
   }
 
   /* ---------- 拖动排序（与 ▲▼ 同一条 reorder 路径） ---------- */

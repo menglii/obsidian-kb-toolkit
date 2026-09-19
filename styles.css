@@ -1627,6 +1627,76 @@
   color: var(--text-muted);
 }
 
+
+/* ============================================================
+ * R25（boss：右键菜单里新增 新建文件 / 新建板块 / 删除板块 +
+ *      对单个板块内「文件宽度」的设置）
+ * 零裸色：一律走主题变量（r3b 剥 var 查裸色）。
+ * ============================================================ */
+
+/* ① 菜单变长了 → 内部滚动兜底。
+ *    ⚠️ clamp 只负责「挪位置」，它不会把窗缩小 —— 窗比视口还高时只会顶到 top:4，
+ *    窗底照样探出屏外，下面那几项就点不到了。 */
+.cb-ctxmenu.cb-secmenu {
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+
+/* ② 菜单里的「文件宽度」一行 —— 整行复用 .cb-wrow：
+ *    拉杆与胶囊开关的几何修正都挂在「.cb-wrow .checkbox-container」那条选择器上，
+ *    所以这一行**必须带上 .cb-wrow**（另起炉灶 = 开关又歪，铁律 50）。
+ *    这里只放开标签宽度、压一档字号，免得把菜单撑破。 */
+.cb-ctx-wrow {
+  padding: 3px 10px;
+  gap: 6px;
+}
+.cb-ctx-wrow .cb-wlb {
+  width: auto;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  white-space: nowrap;
+}
+.cb-ctx-wrow .cb-wval {
+  width: 3.6em;
+}
+/* 拉杆：菜单是 shrink-to-fit —— 宽度 = 最宽子行的 **max-content** 夹在 [232, 300] 之间。
+   原生 range 的 intrinsic 宽 129px，直接放进去会把菜单顶到 268（实测），整个排版都跟着变形。
+   所以既要 basis 小、又要给 max-width 封顶：92px = 232 - 菜单 padding10 - 边框2 - 行 padding20
+   - 两个 gap12 - 标签52 - px 回显43.2 剩下的全部空间，刚好让这一行的 max-content 停在 219 < 220。 */
+.cb-ctx-wrow .cb-wrange {
+  flex: 1 1 80px;
+  min-width: 0;
+  max-width: 92px;
+}
+.cb-ctx-follow .cb-ctx-chk-lb {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-normal);
+}
+
+/* ③ 「新建板块」那行的 4 个数据源按钮（与顶栏面板 .cb-add-type 同一套观感） */
+.cb-ctx-addrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+}
+.cb-ctx-addrow .cb-add-type {
+  padding: 0 6px;
+  line-height: 1.7;
+}
+.cb-ctx-addrow-note {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+/* ④ 「删除板块」的待确认态 —— 第一下只变色，第二下才真删。
+ *    颜色沿用 .cb-ctx-danger（已有），这里只补背景与字重：两者必须看得出区别。 */
+.cb-ctxmenu .cb-ctx-danger.is-armed {
+  background-color: var(--background-modifier-error);
+  font-weight: var(--font-semibold);
+}
+
 /* kbt.css — kb-toolkit 设置页/面板增强样式（R13 界面翻新 / R16 三标签改版 / R18 排版 v3）。
  * 铁律 6：不允许 var(...) 之外的裸色值；变量必须在 obsidian_vars.txt 白名单里。
  * R18（boss：照《设置页排版方案v3-交互效果图》重做显示效果）——

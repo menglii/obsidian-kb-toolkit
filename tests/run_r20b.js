@@ -308,17 +308,26 @@ function makeConfig(obj) {
     { bubbles: true, cancelable: true, clientX: 130, clientY: 96 }));
   let menu = document.body.querySelector(".cb-ctxmenu.cb-secmenu");
   ok(!!menu, "右键板块 → 弹 .cb-secmenu 小窗");
-  eq([...menu.querySelectorAll(".cb-ctx-head .cb-ctx-head-lb")].map(e => e.textContent).join(","),
-    "通用设置,笔记内容,文件操作", "三组标题 = 老板列的三组");
+  /* R25：菜单里又插了「本板块」（新建文件 / 删除板块）与「新建板块」两组。
+     R24 那三组的**相对顺序一个没变**，「文件操作」仍然压在最下面。 */
+  const grpTitles = [...menu.querySelectorAll(".cb-ctx-head .cb-ctx-head-lb")].map(e => e.textContent);
+  eq(grpTitles.join(","), "通用设置,笔记内容,本板块,新建板块,文件操作",
+    "5 组标题（R24 那三组顺序不变，R25 插了 本板块 / 新建板块）");
+  ok(grpTitles.indexOf("文件操作") === grpTitles.length - 1,
+    "「文件操作」仍是最后一组（整个看板那组永远压底）");
   const triRows = [...menu.querySelectorAll(".cb-ctx-tri")];
   eq(triRows.map(r => r.getAttribute("data-field")).join(","), "propsOpen,body,yaml,links",
     "4 个**板块级**三态行（属性展开 / 内容展开 / 显示 YAML / 显示双链）");
   ok(triRows.every(r => r.querySelectorAll(".cb-seg-btn").length === 3), "每行都是「继承 / 开 / 关」三态");
   ok(triRows.every(r => r.querySelectorAll(".cb-seg-btn.is-on").length === 1), "每行恰一个当前态高亮");
   eq(triRows[0].querySelector(".cb-seg-btn.is-on").textContent, "继承", "没设过 → 停在「继承」");
-  const ctxChks = [...menu.querySelectorAll(".cb-ctx-item.cb-ctx-chk")];
+  /* R25：菜单里多了一个打勾项「跟随看板」（板块级宽度那个），所以这里只数
+     **文件操作那一组**的 —— 用 :not(.cb-ctx-follow) 把新加的那项排除掉。 */
+  const ctxChks = [...menu.querySelectorAll(".cb-ctx-item.cb-ctx-chk:not(.cb-ctx-follow)")];
   eq(ctxChks.map(e => e.getAttribute("data-key")).join(","),
     "拖动搬文件,文件隐藏显示,查看隐藏的文件", "文件操作 3 个打勾项（视图级，不冒充板块级）");
+  ok(!!menu.querySelector(".cb-ctx-item.cb-ctx-chk.cb-ctx-follow"),
+    "「跟随看板」也是打勾项，但它是**板块级**的（跟文件操作那组不是一个作用域）");
   ok(!!menu.querySelector(".cb-sec-help.is-hidden"), "「显示帮助」的说明块默认藏着（点了才展开）");
   const acts = [...menu.querySelectorAll(".cb-ctx-item")].map(e => e.getAttribute("data-act")).filter(Boolean);
   eq(acts[0], "刷新", "菜单第一项就是「刷新」");
@@ -427,7 +436,8 @@ function makeConfig(obj) {
   ok(!!cmenu, "右键收容所 → 一样弹小窗");
   eq(cmenu.querySelectorAll(".cb-ctx-tri").length, 4, "收容所同样有 4 个板块级三态行");
   ok(!cmenu.querySelector(".cb-ctx-note"), "它不是「不能单独设置」那类 → 不出现说明块");
-  eq(cmenu.querySelectorAll(".cb-ctx-item.cb-ctx-chk").length, 3, "文件操作 3 项照旧（视图级，每个板块都在）");
+  eq(cmenu.querySelectorAll(".cb-ctx-item.cb-ctx-chk:not(.cb-ctx-follow)").length, 3,
+    "文件操作 3 项照旧（视图级，每个板块都在）");
   ok(!![...cmenu.querySelectorAll(".cb-ctx-item")].find(e => e.getAttribute("data-act") === "刷新"),
     "「刷新」对收容所照样有");
 
@@ -532,6 +542,161 @@ function makeConfig(obj) {
   ok(!!prosC && !prosC.hasClass("cb-pros-fold"), "拨回后属性区重新展开");
   /* 卡片上那个「属性 ▸」单卡开关照旧能用（只是默认值变了，能力没被砍） */
   ok(!!v.listEl.querySelector(".cb-card .cb-pros-toggle"), "单卡「属性 ▾ / ▸」按钮仍在（没被这轮砍掉）");
+
+  /* ---------- (8) R25：菜单里新建文件 / 新建板块 / 删除板块 + 板块级「文件宽度」 ---------- */
+  head("R25 · 右键菜单：新建文件 / 新建板块 / 删除板块 + 板块级文件宽度");
+  if (v.panelOpen) v.closePanel();
+
+  function openSecMenu(which) {
+    const h = [...v.listEl.querySelectorAll(".cb-section")][which || 0].querySelector(".cb-section-head");
+    h.dispatchEvent(new W.MouseEvent("contextmenu",
+      { bubbles: true, cancelable: true, clientX: 130, clientY: 96 }));
+    return document.body.querySelector(".cb-ctxmenu.cb-secmenu");
+  }
+
+  /* --- ① 「文件宽度」：拉杆一行 + 「跟随看板」打勾项 --- */
+  menu = openSecMenu(0);
+  ok(!!menu, "右键板块 → 小窗照旧能弹（加了两组也没炸）");
+  const sWrow = menu.querySelector(".cb-ctx-wrow");
+  ok(!!sWrow, "通用设置里出现「文件宽度」那一行");
+  ok(sWrow.hasClass("cb-wrow"), "这一行复用 .cb-wrow（跟面板那条同一个样式底座）");
+  const wrg = sWrow.querySelector("input.cb-wrange[type=range]");
+  ok(!!wrg, "是原生拉杆（.cb-wrange）");
+  eq(wrg && wrg.getAttribute("min"), "160", "拉杆下限 160");
+  eq(wrg && wrg.getAttribute("max"), "480", "拉杆上限 480");
+  eq(wrg && wrg.getAttribute("step"), "10", "步长 10（跟看板那条同一档）");
+  /* ⚠️ 不能写死 240：R21 段已把看板那条拖到 360 —— 按 config 当前值推 */
+  const viewWNow = String(v.optNum("卡片最小宽度", 240));
+  eq(wrg && wrg.value, viewWNow, "没覆盖时拉杆停在看板那条的当前值（" + viewWNow + "）");
+  const fkItem = menu.querySelector(".cb-ctx-item.cb-ctx-follow");
+  ok(!!fkItem, "「跟随看板」是一项**打勾项**（与「文件操作」那组同一套语言，没另造控件）");
+  eq(fkItem && fkItem.querySelector(".cb-ctx-tick").textContent, "✓", "没覆盖 → 默认打勾（＝跟随看板）");
+  eq(wrg && wrg.disabled, true, "跟随看板时拉杆置灰（不做假控件）");
+  eq(sWrow.querySelector(".cb-wval").textContent, viewWNow + " px", "右边显示当前像素值");
+
+  /* 点掉「跟随看板」→ 真的写进这一块，别的板块一个不动 */
+  click(fkItem);
+  eq(v.secs[0].secW, Number(viewWNow), "取消跟随 → secW 写进去（值就是当前拉杆值）");
+  ok(SAVES.some(s => s.key === "板块" && Array.isArray(s.val)
+    && s.val.some(x => x && x["文件宽度"] === Number(viewWNow))),
+    "写回 .base「板块」段里的「文件宽度」（真落盘，不是只改内存）");
+  ok(!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "拨完 → 小窗收起");
+  let secEls = [...v.listEl.querySelectorAll(".cb-section")];
+  eq(secEls[0].style.getPropertyValue("--cb-card-w"), viewWNow + "px",
+    "🔴 变量写在**这个** .cb-section 上（后代 .cb-grid 靠继承）");
+  eq(secEls[1].style.getPropertyValue("--cb-card-w"), "",
+    "🔴 另一个板块没被连坐 —— 板块级隔离成立");
+
+  /* 拉杆拖到 420（**跟看板那条拉开**，才验得出板块覆盖真分叉了） */
+  menu = openSecMenu(0);
+  eq(menu.querySelector(".cb-ctx-follow .cb-ctx-tick").textContent, "", "有覆盖 → 打勾项不勾");
+  const wrg2 = menu.querySelector("input.cb-wrange");
+  eq(wrg2.disabled, false, "有覆盖 → 拉杆可拖（置灰解除）");
+  wrg2.value = "420";
+  fire(wrg2, "input");
+  eq([...v.listEl.querySelectorAll(".cb-section")][0].style.getPropertyValue("--cb-card-w"), "420px",
+    "拖动中即时写这一个板块的变量（不动 DOM 树）");
+  eq([...v.listEl.querySelectorAll(".cb-section")][1].style.getPropertyValue("--cb-card-w"), "",
+    "拖动中也只染这一块（隔壁板块变量还是空的）");
+  fire(wrg2, "change");
+  eq(v.secs[0].secW, 420, "松手 → secW = 420（跟看板的 " + viewWNow + " 分叉了）");
+  eq(v.secs.length > 1 ? v.secs[1].secW : null, null, "隔壁板块的 secW 仍是空（没被带上）");
+
+  /* 勾回「跟随看板」→ 覆盖被真删掉，落盘里也不留这把键 */
+  menu = openSecMenu(0);
+  click(menu.querySelector(".cb-ctx-item.cb-ctx-follow"));
+  eq(v.secs[0].secW, null, "勾回「跟随看板」→ secW = null（真删覆盖，不是写个等于默认的数）");
+  const lastSecSave = [...SAVES].reverse().find(s => s.key === "板块");
+  ok(!!lastSecSave && !lastSecSave.val.some(x => x && x["文件宽度"] !== undefined),
+    "落盘里这把键被删干净（继承 = 不写，别人手写的值不会被钉死）");
+  eq([...v.listEl.querySelectorAll(".cb-section")][0].style.getPropertyValue("--cb-card-w"), "",
+    "跟随看板后不再写死变量（改看板那条拉杆又能拉动这一块了）");
+  ok(!v.listEl.querySelector(".cb-card").style.getPropertyValue("--cb-card-w"),
+    "单张卡片上也没有内联宽度（宽度是板块级的，不是逐卡设的）");
+
+  /* --- ② 新建文件：复用板块级「＋」那套 --- */
+  const mkCalls = [];
+  const origCreate = v.createInSection;
+  v.createInSection = function (sec, child, grid) {
+    mkCalls.push({ name: sec && sec.name, child: child, grid: grid });
+    return Promise.resolve(null);
+  };
+  menu = openSecMenu(0);
+  const mkItem = [...menu.querySelectorAll(".cb-ctx-item")].find(e => e.getAttribute("data-act") === "新建文件");
+  ok(!!mkItem, "「本板块」组里有「新建文件」");
+  ok(!mkItem.hasClass("is-disabled"), "可编辑状态下「新建文件」可点");
+  click(mkItem);
+  eq(mkCalls.length, 1, "点一下 → 走 createInSection（复用板块级「＋」，没另写一份新建流程）");
+  eq(mkCalls[0].child, "", "落点按板块这一层算");
+  ok(!!mkCalls[0].grid && String(mkCalls[0].grid.className).indexOf("cb-grid") >= 0,
+    "把本板块的栅格传进去了（临时卡片才插得进去）");
+  ok(!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "点完收起小窗");
+  v.createInSection = origCreate;
+
+  /* --- ③ 删除板块：两下确认 --- */
+  const keep0 = JSON.parse(JSON.stringify(v.secs[0]));
+  const namesBefore = v.secs.map(s => s.name);
+  const nBefore = v.secs.length;
+  menu = openSecMenu(0);
+  const delEl = [...menu.querySelectorAll(".cb-ctx-item")].find(e => e.getAttribute("data-act") === "删除板块");
+  ok(!!delEl, "有「删除板块」");
+  ok(delEl.hasClass("cb-ctx-danger"), "删除项带危险色（与卡片菜单「删除文件」同一套 .cb-ctx-danger）");
+  eq(delEl.textContent, "删除「收件箱」", "文案带上要删的板块名（说清删的是谁）");
+  click(delEl);
+  eq(v.secs.length, nBefore, "🔴 第一下**不删**（只进待确认）");
+  eq(delEl.textContent, "再点一次确认删除", "第一下把文案换成「再点一次确认删除」");
+  ok(delEl.hasClass("is-armed"), "第一下加 .is-armed（跟第一下视觉上分得开）");
+  ok(!!document.body.querySelector(".cb-ctxmenu.cb-secmenu"),
+    "🔴 第一下**不收小窗**（收起了就没法点第二下）");
+  click(delEl);
+  eq(v.secs.length, nBefore - 1, "🔴 第二下真的删掉了");
+  eq(v.secs.map(s => s.name).join(","), namesBefore.filter((n, i) => i !== 0).join(","),
+    "删掉的正好是右键那一块，其余板块一个不动");
+  ok(!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "删完收起小窗");
+  /* 收拾现场：把板块塞回去（后面没别的断言，但收尾要干净） */
+  v.secs.splice(0, 0, keep0);
+  v.afterChange();   /* ⚠️ 必须走 afterChange：repaint 会按 config 重建 secs，手动 splice 会被盖回去 */
+  eq(v.secs.length, nBefore, "（收拾现场）板块塞回去了");
+
+  /* --- ④ 新建板块：4 个数据源按钮，加完就地翻开面板 --- */
+  menu = openSecMenu(0);
+  const addRow = menu.querySelector(".cb-ctx-addrow");
+  ok(!!addRow, "有「新建板块」那一行");
+  const typeBtns = [...addRow.querySelectorAll("button.cb-add-type")];
+  eq(typeBtns.map(b => b.getAttribute("data-type")).join(","), "folder,tag,formula,catchall",
+    "4 个数据源按钮（与顶栏面板「＋ 添加」同一套 ADDABLE）");
+  eq(typeBtns.map(b => b.textContent).join(","), "文件夹,标签,公式,收容所", "按钮文案走 SOURCE_LABEL");
+  const n0 = v.secs.length;
+  click(typeBtns[0]);
+  eq(v.secs.length, n0 + 1, "点「文件夹」→ 真的多了一个板块");
+  const fresh = v.secs.find(s => s.name === "新板块");
+  ok(!!fresh && fresh.source === "folder", "新板块是文件夹源");
+  eq(fresh && fresh.secW, null, "新板块的宽度初值 = null（跟随看板）");
+  eq(v.panelOpen, true, "🔴 加完就地翻开顶栏面板（「新建」紧接着「配置」）");
+  const freshIdx = v.secs.indexOf(fresh);
+  ok(!!v.panelEl.querySelector("div.cb-edit[data-idx='" + freshIdx + "']"),
+    "面板里就地展开的正是新板块那一行");
+  /* 收拾现场 */
+  v.deleteSection(freshIdx);
+  v.closePanel();
+  v.repaint(false);
+  eq(v.secs.length, n0, "（收拾现场）新板块删掉了");
+
+  /* --- ⑤ 只读模式：按钮该禁的禁、该换说明的换说明 --- */
+  v.cfgSet("只读", true);
+  v.repaint(false);
+  menu = openSecMenu(0);
+  const mkItem2 = [...menu.querySelectorAll(".cb-ctx-item")].find(e => e.getAttribute("data-act") === "新建文件");
+  ok(!!mkItem2 && mkItem2.hasClass("is-disabled"), "只读模式：「新建文件」置灰（点了也不会真建）");
+  ok(!menu.querySelector(".cb-ctx-addrow button.cb-add-type"), "只读模式：不摆那排数据源按钮（免得点了没反应）");
+  ok(!!menu.querySelector(".cb-ctx-addrow-note"), "只读模式：如实说明「先点工具条 ✎」");
+  const fkRO = menu.querySelector(".cb-ctx-item.cb-ctx-follow");
+  ok(!!fkRO && !fkRO.hasClass("is-disabled"),
+    "只读只挡「编辑笔记」，不挡视图配置（「跟随看板」仍可拨）");
+  v.closeSecMenu();
+  v.cfgSet("只读", null);
+  v.repaint(false);
+  ok(!v.readonly(), "（收拾现场）只读关掉");
 
   console.log("\nR20-看板DOM冒烟: PASS " + pass + " / FAIL " + fail
     + (fail ? "\n" + fails.join("\n") : ""));

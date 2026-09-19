@@ -21,6 +21,9 @@
  *      否则「拨了不生效但全绿」；
  *   ② 折叠态的键就是**板块名**（foldKey）→ 改名必须迁移，否则折叠状态凭空丢。
  * 真 DOM 真点那刀在 tests/run_r20b.js 的 R24 段（源码正则抓不到「改完当场抛异常」）。
+ *
+ * R25 后续（同一个菜单里又加了 新建文件 / 新建板块 / 删除板块 + 板块级「文件宽度」）：
+ * 那些断言在 tests/run_r25.js + run_r20b.js 的 R25 段；本文件只留下被结构变更打到的两处改写。
  */
 const path = require("path");
 const fs = require("fs");
@@ -129,9 +132,11 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
   ok(om.indexOf("this.closeCardMenu()") >= 0 && om.indexOf("this.closeSecMenu()") >= 0,
     "C7：开之前先把同类小窗都收掉（不会两个菜单叠着）");
 
-  ok(om.indexOf('grp("通用设置"') >= 0, "C8：第一组 = 通用设置");
-  ok(om.indexOf('grp("笔记内容"') >= 0, "C9：第二组 = 笔记内容");
-  ok(om.indexOf('grp("文件操作"') >= 0, "C10：第三组 = 文件操作");
+  /* R25 起菜单有五组（多了「本板块」「新建板块」），所以这里只断言**存在**，
+     顺序与组数由 run_r20b 的真 DOM 段与 run_r25 守。 */
+  ok(om.indexOf('grp("通用设置"') >= 0, "C8：有「通用设置」组");
+  ok(om.indexOf('grp("笔记内容"') >= 0, "C9：有「笔记内容」组");
+  ok(om.indexOf('grp("文件操作"') >= 0, "C10：有「文件操作」组");
   ok(om.indexOf('item("刷新"') >= 0 && om.indexOf("this.refreshBoard()") >= 0, "C11：第一项 = 刷新 → refreshBoard()");
   /* 「显示帮助」点完**不能收窗**（收窗 = 把刚展开的说明块连人带窗一起摘掉）→ 走 itemStay */
   ok(om.indexOf('itemStay("显示帮助"') >= 0, "C12：通用设置里有「显示帮助」，且走 itemStay（点完不收窗）");
@@ -195,7 +200,9 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
     && /if \(sec\.yaml === true \|\| sec\.yaml === false\) o\["显示 YAML"\] = sec\.yaml;/.test(st),
     "D4：老那三个三态写回逻辑没被动过（本轮是加同一套，不是改老逻辑）");
   /* ③ 新建板块要有这个字段，否则 undefined 混进三态 */
-  ok(/propsOpen: null, extra: \{\} \}/.test(cb), "D5：addSection 的新板块初始化 propsOpen: null");
+  /* R25：初值表里多了 secW（板块级文件宽度）—— 按意图改断言，别把「结构变了」当「坏了」 */
+  ok(/propsOpen: null, secW: null, extra: \{\} \}/.test(cb),
+    "D5：addSection 的新板块初始化 propsOpen: null / secW: null");
   /* ④ 取值：板块级优先，没写回落视图默认 */
   ok(count(/propsOpenOn\(sec\) \{/g, cb) === 1, "D6：propsOpenOn 只定义 1 次（复写病自检）");
   const po = bodyOf(cb, "propsOpenOn(sec) {");
