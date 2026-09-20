@@ -137,11 +137,14 @@ function makeConfig(obj) {
   click(gearBtn);
   ok(v.panelOpen && !v.panelEl.hasClass("is-hidden"), "点齿轮 → 面板打开");
   const kids = [...v.panelBodyEl.children];
-  eq(kids.length, 4, "面板正文正好 4 段（卡片 / 看板行为 / 板块 / 高级）");
+  /* R27：「内容」组插在「看板行为」与「板块」之间 → 正文从 4 段变 5 段 */
+  eq(kids.length, 5, "面板正文正好 5 段（卡片 / 看板行为 / 内容 / 板块 / 高级）");
   const grpLabels = [...v.panelBodyEl.querySelectorAll(".cb-grp > .cb-grp-lb")].map(e => e.textContent);
-  eq(grpLabels.join(","), "卡片,看板行为,板块", "前三段的段落名（高级那段是 <details>，不带小标签）");
-  eq(kids[3].tagName, "DETAILS", "第四段是 <details>（高级，默认折叠）");
-  eq(kids[3].querySelector("summary").textContent, "高级", "高级组 summary 只留「高级」两字");
+  eq(grpLabels.join(","), "卡片,看板行为,内容,板块", "各段的段落名（高级那段是 <details>，不带小标签）");
+  /* 不按下标抓 —— 段数以后还会变，按**标签名**找才稳 */
+  const advRow = kids.find((e) => e.tagName === "DETAILS");
+  ok(!!advRow, "最后一段是 <details>（高级，默认折叠）");
+  eq(advRow && advRow.querySelector("summary").textContent, "高级", "高级组 summary 只留「高级」两字");
 
   /* ---------- ②' R21：宽度 + 自动并成一行（真 DOM，源码正则抓不到抛异常） ---------- */
   head("R21 · 「卡片」组：文件宽度 [拉杆] ＋ 自动 [开关] 一行");
@@ -179,9 +182,10 @@ function makeConfig(obj) {
   ok(v.panelOpen && !v.panelEl.hasClass("is-hidden"), "两次重绘后面板都还开着（没被自己关掉）");
 
   const behSwitches = [...v.panelBodyEl.querySelectorAll(".cb-grp-body > .cb-opt")];
-  eq(behSwitches.length, 5, "「看板行为」段 5 个开关（R23 加了「属性默认展开」）");
+  /* R27：本段又加了一个「隐藏空板块」（一条笔记都没有的板块不渲染） */
+  eq(behSwitches.length, 6, "「看板行为」段 6 个开关（R23 属性默认展开 + R27 隐藏空板块）");
   eq(behSwitches.map(e => e.getAttribute("data-key")).join(","),
-    "允许重复,显示收容所,显正文,属性默认展开,只读",
+    "允许重复,显示收容所,隐藏空板块,显正文,属性默认展开,只读",
     "开关顺序（键名不变，.base 老配置照样认）");
   ok(behSwitches.every(e => {
     const sw = e.querySelector(".checkbox-container");
@@ -207,7 +211,7 @@ function makeConfig(obj) {
   eq(secRows.map(r => r.querySelector(".cb-row-name").textContent).join(","), "收件箱,收容所", "行名 = 板块名");
   eq(v.panelBodyEl.querySelector(".cb-add-wrap .cb-add-btn").textContent, "＋ 添加", "添加按钮文案极简");
 
-  const adv = kids[3];
+  const adv = kids.find((e) => e.tagName === "DETAILS");
   eq(adv.querySelectorAll(".cb-opt-row > .cb-opt").length, 3, "高级组里 3 个开关（YAML / 双链 / 拖动搬文件）");
   ok(!!adv.querySelector("details.cb-io"), "配置搬运折在高级组里面（默认折叠）");
   ok(/配置搬运/.test(adv.querySelector("details.cb-io summary").textContent), "搬运组 summary 说清做什么");
@@ -342,7 +346,15 @@ function makeConfig(obj) {
   click([...triRows[1].querySelectorAll(".cb-seg-btn")].find(b => b.textContent === "关"));
   eq(v.secs[0].body, false, "点「内容展开 · 关」→ 该板块 body = false（只改这一块）");
   ok(SAVES.some(s => s.key === "板块"), "跟着写回 config「板块」段");
-  ok(!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "点完一项 → 小窗自动收起（跟 Windows 一致）");
+  /* R27（boss 第 3 条）：改完设置**不关窗** —— 就地重开一份，接着还能改下一项。
+     所以这里断言的是「窗还在」+「顶上多一条回执」+「当前态真的挪到『关』」（不是只留旧 DOM）。 */
+  ok(!!document.body.querySelector(".cb-ctxmenu.cb-secmenu"),
+    "点完一项 → 小窗**不关**（R27 起就地刷新，不用重新右键）");
+  const st1 = document.body.querySelector(".cb-ctxmenu.cb-secmenu .cb-ctx-status");
+  ok(!!st1 && /内容展开/.test(st1.textContent), "顶上多一条回执：说清刚改的是哪一项");
+  const tri2 = [...document.body.querySelectorAll(".cb-ctxmenu.cb-secmenu .cb-ctx-tri")]
+    .find(r => r.getAttribute("data-field") === "body");
+  eq(tri2.querySelector(".cb-seg-btn.is-on").textContent, "关", "重画后当前态挪到「关」（控件状态是真重算的）");
 
   /* 真点「属性展开 · 关」→ 卡片属性区当场折叠（验板块级 propsOpen 真接了线） */
   ok(!v.listEl.querySelector(".cb-card .cb-props").hasClass("cb-pros-fold"), "设之前属性区展开（继承视图默认）");
@@ -449,7 +461,7 @@ function makeConfig(obj) {
   click([...cRow.querySelectorAll(".cb-seg-btn")].find(b => b.textContent === "关"));
   eq(v.secs[ci].body, false, "右键改收容所「内容展开」→ 只写进收容所那一份");
   eq(v.secs[0].body, null, "第一个板块（收件箱）没被连坐 —— 板块级隔离成立");
-  ok(!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "点完自动收起");
+  ok(!!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "点完不关窗（R27 起就地刷新）");
   v.resetSection(ci);
   eq(v.secs[ci].body, null, "（收拾现场）把收容所那份覆盖清回去");
 
@@ -581,7 +593,10 @@ function makeConfig(obj) {
   ok(SAVES.some(s => s.key === "板块" && Array.isArray(s.val)
     && s.val.some(x => x && x["文件宽度"] === Number(viewWNow))),
     "写回 .base「板块」段里的「文件宽度」（真落盘，不是只改内存）");
-  ok(!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "拨完 → 小窗收起");
+  ok(!!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "拨完不关窗（R27 起就地刷新）");
+  const fk2 = document.body.querySelector(".cb-ctxmenu.cb-secmenu .cb-ctx-item.cb-ctx-follow");
+  eq(fk2 && fk2.querySelector(".cb-ctx-tick").textContent, "",
+    "重画后「跟随看板」的勾没了 —— 勾是按 secW 现状重算的，不是留着旧 DOM");
   let secEls = [...v.listEl.querySelectorAll(".cb-section")];
   eq(secEls[0].style.getPropertyValue("--cb-card-w"), viewWNow + "px",
     "🔴 变量写在**这个** .cb-section 上（后代 .cb-grid 靠继承）");
@@ -811,6 +826,165 @@ function makeConfig(obj) {
   v.cfgSet("只读", null);
   v.repaint(false);
   ok(!v.readonly(), "（收拾现场）只读关掉");
+
+  /* ---------- (10) R27：不关窗就地刷新 / 新建描边 / 收起本板块 / 面板填空 ---------- */
+  head("R27 · 不关窗就地刷新 + 新建描边 + 收起本板块 + 面板填空");
+  const sleep27 = (ms) => new Promise((r) => setTimeout(r, ms));
+  const secAt = (i) => v.sections.find((s) => s.srcIndex === i);
+  const actsOf = (m) => [...m.querySelectorAll(".cb-ctx-item")]
+    .map((e) => e.getAttribute("data-act")).filter(Boolean);
+  const grpOf = (label) => [...v.panelEl.querySelectorAll(".cb-grp")]
+    .find((g) => g.querySelector(".cb-grp-lb").textContent === label);
+  const wrowOf = (grp, label) => [...grp.querySelectorAll(".cb-grp-body > .cb-wrow")]
+    .find((r) => r.querySelector(".cb-wlb").textContent === label);
+
+  /* --- ① 「收起本板块」就在「刷新」下面，点完真收起 + 不关窗 --- */
+  menu = openSecMenu(0);
+  const acts27 = actsOf(menu);
+  eq(acts27[0], "刷新", "第一项仍是「刷新」");
+  eq(acts27[1], "收起本板块", "第 2 项就是「收起本板块」（老板点名的位置）");
+  eq(v.isCollapsed(secAt(0), null, false), false, "起始状态：这一块是展开的");
+  click([...menu.querySelectorAll(".cb-ctx-item")].find((e) => e.getAttribute("data-act") === "收起本板块"));
+  eq(v.isCollapsed(secAt(0), null, false), true, "点了真收起（写进 K_FOLD 折叠表）");
+  ok(!!document.body.querySelector(".cb-ctxmenu.cb-secmenu"), "收起完小窗**还开着**（改完不关窗）");
+  ok(!!v.listEl.querySelector(".cb-grid.is-collapsed"), "看板上那一块真的收起来了");
+  eq(actsOf(document.body.querySelector(".cb-ctxmenu.cb-secmenu"))[1], "展开本板块",
+    "重画后第 2 项翻成「展开本板块」（标签跟着状态走，不是写死的）");
+  click([...document.body.querySelectorAll(".cb-ctxmenu.cb-secmenu .cb-ctx-item")]
+    .find((e) => e.getAttribute("data-act") === "展开本板块"));
+  eq(v.isCollapsed(secAt(0), null, false), false, "（收拾现场）展开回来");
+  v.closeSecMenu();
+  v.repaint(false);
+
+  /* --- ② 顶上那条回执：说清「刚改的是哪一项」，而不是 persist 的通用文案 --- */
+  menu = openSecMenu(0);
+  ok(!menu.querySelector(".cb-ctx-status"), "刚右键时没有回执（回执说的是「刚刚」）");
+  const triB27 = [...menu.querySelectorAll(".cb-ctx-tri")].find((r) => r.getAttribute("data-field") === "body");
+  click([...triB27.querySelectorAll(".cb-seg-btn")].find((b) => b.textContent === "关"));
+  const st27 = document.body.querySelector(".cb-ctxmenu.cb-secmenu .cb-ctx-status");
+  ok(!!st27, "改完设置 → 顶上出现一条回执");
+  ok(!!st27 && /内容展开/.test(st27.textContent) && /关/.test(st27.textContent),
+    "回执说的是具体那一项（「….内容展开 → 关」）");
+  ok(!!st27 && st27.textContent.indexOf("已写入") < 0,
+    "🔴 不是被 persist() 覆写过的通用文案（只写 saveState 就会变成这句废话）");
+  eq(v.secs[0].body, false, "（顺带核一下）覆盖真写进这块了");
+  v.secs[0].body = null;
+  v.afterChange();
+  v.closeSecMenu();
+
+  /* --- ③ 新建后的描边闪：挂得上 / 重绘冲不掉 / 到点自己摘 --- */
+  v.repaint(false);
+  const card27 = v.listEl.querySelector(".cb-card");
+  const fp27 = card27 && card27.getAttribute("data-path");
+  ok(!!fp27, "拿到一张真卡的 data-path");
+  const same27 = [...v.listEl.querySelectorAll(".cb-card")]
+    .filter((c) => c.getAttribute("data-path") === fp27).length;
+  v.flashNewCard(fp27);
+  eq(v.listEl.querySelectorAll(".cb-card.cb-flash").length, same27,
+    "flashNewCard → 同路径的卡都挂上 .cb-flash（描边闪起来）");
+  eq(v.flashPath, fp27, "flashPath 记着它（给紧跟的那次重绘补类用）");
+  v.repaint(false);
+  eq(v.listEl.querySelectorAll(".cb-card.cb-flash").length, same27,
+    "🔴 重绘之后描边还在（不是只闪一帧就被重绘冲掉）");
+  await sleep27(1750);
+  eq(v.listEl.querySelectorAll(".cb-card.cb-flash").length, 0, "~1.6s 后自己摘掉（不留常驻描边）");
+  eq(v.flashPath, null, "flashPath 也清干净了（不留脏状态）");
+
+  /* --- ④ 面板：摘要条跟着开关走 --- */
+  head("R27 · 面板：摘要条 / 内容组 / 一键全收 / 已自定义");
+  if (!v.panelOpen) click(v.rootEl.querySelector("button.cb-gear"));
+  ok(v.panelOpen, "面板打开");
+  const sub27 = v.panelEl.querySelector(".cb-panel-sub");
+  ok(!!sub27, "窗头下面多了一条摘要（.cb-panel-sub）");
+  ok(!!sub27 && /篇笔记/.test(sub27.textContent) && /个板块/.test(sub27.textContent),
+    "摘要里有「N 篇笔记 · M 个板块」");
+  ok(!!sub27 && /正文/.test(sub27.textContent) && /可编辑|只读/.test(sub27.textContent),
+    "还报了正文开关与读写态");
+  const bodySw27 = v.panelEl.querySelector('.cb-opt[data-key="显正文"] input.cb-opt-box');
+  bodySw27.checked = true;
+  fire(bodySw27, "change");
+  ok(/正文开/.test(v.panelEl.querySelector(".cb-panel-sub").textContent),
+    "拨「显正文」→ 摘要当场跟着变（不是打开面板才算一次）");
+  const bodySw27b = v.panelEl.querySelector('.cb-opt[data-key="显正文"] input.cb-opt-box');
+  bodySw27b.checked = false;
+  fire(bodySw27b, "change");
+  ok(/正文关/.test(v.panelEl.querySelector(".cb-panel-sub").textContent), "（收拾现场）拨回来 → 正文关");
+
+  /* --- ⑤ 面板：四段 + 「内容」组真接线 --- */
+  eq([...v.panelEl.querySelectorAll(".cb-grp > .cb-grp-lb")].map((e) => e.textContent).join(","),
+    "卡片,看板行为,内容,板块", "四段段落名（R27 多了「内容」）");
+  const contentGrp = grpOf("内容");
+  ok(!!contentGrp, "「内容」组在面板里");
+  const propsInp = contentGrp && contentGrp.querySelector("input.cb-props-text");
+  ok(!!propsInp, "「内容」组里有「显示属性」文本框");
+  eq(propsInp && propsInp.placeholder, "简介, 平台, 状态", "给了示例 placeholder");
+  const charsRow = contentGrp && [...contentGrp.querySelectorAll(".cb-wrow")]
+    .find((r) => r.querySelector(".cb-wlb").textContent === "正文上限");
+  ok(!!charsRow, "「内容」组里有「正文上限」拉杆");
+  eq(charsRow && charsRow.querySelector("input.cb-wrange").getAttribute("min"), "0",
+    "正文上限从 0 起（0 = 不截断）");
+
+  /* --- ⑥ 面板：「卡片」组三行（宽度 / 间距 / 高度） + 间距真写变量 --- */
+  const cardGrp27 = grpOf("卡片");
+  eq([...cardGrp27.querySelectorAll(".cb-grp-body > .cb-wrow .cb-wlb")].map((e) => e.textContent).join(","),
+    "文件宽度,网格间距,卡片高度", "「卡片」组三行（R27 补了间距与默认高度）");
+  const gapRow27 = wrowOf(cardGrp27, "网格间距");
+  const gapRg27 = gapRow27.querySelector("input.cb-wrange");
+  eq([gapRg27.getAttribute("min"), gapRg27.getAttribute("max"), gapRg27.getAttribute("step")].join("/"),
+    "0/24/2", "间距拉杆 0–24 step 2");
+  gapRg27.value = "16";
+  fire(gapRg27, "change");
+  eq(v.rootEl.style.getPropertyValue("--cb-gap"), "16px", "拨间距 → .cb-root 真写 --cb-gap: 16px");
+  ok(SAVES.some((s) => s.key === "网格间距" && s.val === 16), "真落盘「网格间距」= 16");
+  v.panelOpen = true;
+  v.renderPanel();
+  const gapRg27b = wrowOf(grpOf("卡片"), "网格间距").querySelector("input.cb-wrange");
+  gapRg27b.value = "8";
+  fire(gapRg27b, "change");
+  ok(SAVES.some((s) => s.key === "网格间距" && s.val === 8), "（收拾现场）拨回 8");
+  const hRow27 = wrowOf(grpOf("卡片"), "卡片高度");
+  ok(!!hRow27 && hRow27.textContent.indexOf("跟随内容") >= 0,
+    "「卡片高度」行带「跟随内容」打勾项（跟宽度的「跟随看板」同一套语言）");
+
+  /* --- ⑦ 面板：「全部收起 / 全部展开」真生效 --- */
+  const bulk27 = v.panelEl.querySelector(".cb-bulk");
+  ok(!!bulk27, "「板块」组里有那一行一键操作");
+  click(bulk27.querySelector(".cb-bulk-shut"));
+  eq(v.isCollapsed(secAt(0), null, false), true, "点「全部收起」→ 板块真收起来（写的是同一张 K_FOLD）");
+  ok(!!v.listEl.querySelector(".cb-grid.is-collapsed"), "看板上也真收了");
+  click(v.panelEl.querySelector(".cb-bulk .cb-bulk-open"));
+  eq(v.isCollapsed(secAt(0), null, false), false, "点「全部展开」→ 展开回来");
+  ok(!!v.panelEl.querySelector(".cb-panel-msg"), "一键操作后那个面板状态行还在（没被重绘漏掉）");
+
+  /* --- ⑧ 面板：有覆盖的行才挂「已自定义」徽标 --- */
+  v.secs[0].secW = 300;
+  v.afterChange();
+  if (v.panelOpen) v.renderPanel();
+  eq(v.panelEl.querySelectorAll(".cb-badge-ovr").length, 1, "有覆盖 → 恰一行标「已自定义」");
+  ok(/已自定义/.test(v.panelEl.querySelector(".cb-badge-ovr").textContent), "徽标文案 = 已自定义");
+  v.secs[0].secW = null;
+  v.afterChange();
+  if (v.panelOpen) v.renderPanel();
+  eq(v.panelEl.querySelectorAll(".cb-badge-ovr").length, 0, "（收拾现场）覆盖清掉 → 徽标没了（不是每行都挂）");
+
+  /* --- ⑨ 「隐藏空板块」真跳过 + 万一全空给人话 --- */
+  const isEmptySec = (s) => !(s.total > 0) && !(s.entries && s.entries.length)
+    && !(s.children && s.children.length);
+  const shownBefore27 = v.listEl.querySelectorAll(".cb-section").length;
+  const empties27 = v.sections.filter(isEmptySec).length;
+  v.cfgSet("隐藏空板块", true);
+  v.sig = null;
+  v.onDataUpdated();
+  const shownAfter27 = v.listEl.querySelectorAll(".cb-section").length;
+  eq(shownAfter27, shownBefore27 - empties27,
+    "开「隐藏空板块」→ 空的块真的不渲染了（本地空板块 " + empties27 + " 个）");
+  if (shownAfter27 === 0) ok(!!v.listEl.querySelector(".cb-empty"), "全空时给一句人话（不留一片白）");
+  v.cfgSet("隐藏空板块", null);
+  v.sig = null;
+  v.onDataUpdated();
+  eq(v.listEl.querySelectorAll(".cb-section").length, shownBefore27, "（收拾现场）开关关掉 → 板块数复原");
+  if (v.panelOpen) v.closePanel();
+  v.repaint(false);
 
   console.log("\nR20-看板DOM冒烟: PASS " + pass + " / FAIL " + fail
     + (fail ? "\n" + fails.join("\n") : ""));

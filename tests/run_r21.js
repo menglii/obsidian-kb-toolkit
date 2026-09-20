@@ -122,9 +122,10 @@ const src75 = stripComments(fs.readFileSync(path.join(PLUG, "src", "75_core_sett
   ok(vo.indexOf("key: K_FILL") < 0, "D3：K_FILL 已从原生视图选项面板挪走");
   ok(vo.indexOf("displayName: \"空位铺满整行") < 0 && vo.indexOf("displayName: \"卡片最小宽度") < 0,
     "D4：两个描述项一行不剩（不是靠 shouldHide 藏起来）");
-  ["K_PROPS", "K_BODY", "K_CHARS"].forEach(k => {
-    ok(vo.indexOf("key: " + k) >= 0, "D5：显示类项 " + k + " 照旧留在原生面板");
-  });
+  /* R27：K_PROPS / K_CHARS 也挪进顶栏「内容」组（跟 R21 的宽度、R23 的属性展开一个套路） */
+  ok(vo.indexOf("key: K_PROPS") < 0 && vo.indexOf("key: K_CHARS") < 0,
+    "D5：显示属性 / 正文字数已从原生面板挪走（键没删，只换台面）");
+  ok(vo.indexOf("key: K_BODY") >= 0, "D5b：显正文（K_BODY）照旧留在原生面板");
   /* R23：K_PROS_OPEN 也挪进顶栏面板了（「看板行为」组） */
   ok(vo.indexOf("key: K_PROS_OPEN") < 0,
     "D5b（R23）：K_PROS_OPEN 已从原生面板挪进顶栏「看板行为」组");
@@ -140,8 +141,10 @@ const src75 = stripComments(fs.readFileSync(path.join(PLUG, "src", "75_core_sett
     "D9：配置搬运导出照旧带上两个键");
   ok(/kinds\[K_WIDTH\]\s*=\s*"num"/.test(cb) && /kinds\[K_FILL\]\s*=\s*"bool"/.test(cb),
     "D10：配置搬运导入的键型也没变（number / bool）");
-  ok((cb.match(/\? "1fr" : minW \+ "px"/g) || []).length >= 2,
-    "D11：渲染 + 编辑器保护两条路照旧写 --cb-card-max（1fr / 拉杆宽度）");
+  /* R27：两条路统一走 applyRootVars() —— 意图不变（--cb-card-max 必须真被写） */
+  ok((cb.match(/\? "1fr" : minW \+ "px"/g) || []).length >= 1
+    && (cb.match(/this\.applyRootVars\(\);/g) || []).length >= 2,
+    "D11（R27）：--cb-card-max 由 applyRootVars() 统一写，重绘 + 编辑器保护两条路都调它");
   ok(cb.indexOf("deferRepaintUntilBlur") >= 0, "D12：输入框保护（deferRepaintUntilBlur）没被这轮碰掉");
 }
 

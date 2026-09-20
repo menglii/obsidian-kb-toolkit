@@ -193,9 +193,12 @@ async function boot(app, modules) {
   {
     const vo = bodyOf(cb, "static getViewOptions(config)");
     ok(vo.length > 0, "D1（需求4-①）：getViewOptions 还是静态方法（Bases 视图选项入口）");
-    ["K_PROPS", "K_BODY", "K_CHARS"].forEach(k => {
-      ok(vo.indexOf("key: " + k) >= 0, "D2（需求4-①）：视图配置保留显示类项 " + k);
+    /* R27：显示属性 / 正文字数也搬走了 —— 顶栏「内容」组一条能放「标签 + 拉杆 + 回显」，
+       原生面板一条 descriptor 放不下；键与语义一个没变，只是换了台面。 */
+    ["K_PROPS", "K_CHARS"].forEach(k => {
+      ok(vo.indexOf("key: " + k) < 0, "D2（需求4-①／R27）：已搬出原生面板 → " + k);
     });
+    ok(vo.indexOf("key: K_BODY") >= 0, "D2b（需求4-①）：显正文（K_BODY）仍留在原生面板");
     /* R21：宽度 + 自动也从原生面板挪走了 —— 那边一条 descriptor 只能占一行，
      * 合不成「文件宽度 [拉杆] 240 px  自动 [开关]」；键一个没删，只是换了台面。 */
     ["K_WIDTH", "K_FILL"].forEach(k => {
@@ -220,10 +223,12 @@ async function boot(app, modules) {
   {
     ok(/^  addGroup\(label\) \{/m.test(cb), "E1（需求4-②）：addGroup 分段帮助函数在");
     const rp = bodyOf(cb, "renderPanel() {");
-    eq((rp.match(/this\.addGroup\(/g) || []).length, 3,
-      "E2（需求4-②／R21）：renderPanel 分成「卡片」「看板行为」「板块」三组（高级第四组走 details）");
-    ok(/this\.addGroup\("卡片"\)/.test(rp) && /this\.addGroup\("看板行为"\)/.test(rp) && /this\.addGroup\("板块"\)/.test(rp),
-      "E3（需求4-②／R21）：段落名就是这三个（极简，不加小字说明）");
+    /* R27（boss 第 5 条：面板稍稍有点空）：多出一组「内容」（显示属性 / 正文上限） */
+    eq((rp.match(/this\.addGroup\(/g) || []).length, 4,
+      "E2（需求4-②／R27）：renderPanel 分成「卡片」「看板行为」「内容」「板块」四组（高级第五段走 details）");
+    ok(/this\.addGroup\("卡片"\)/.test(rp) && /this\.addGroup\("看板行为"\)/.test(rp)
+      && /this\.addGroup\("内容"\)/.test(rp) && /this\.addGroup\("板块"\)/.test(rp),
+      "E3（需求4-②／R27）：段落名就是这四个（极简，不加小字说明）");
     ok(/advRow\.createEl\("summary", \{ text: "高级" \}\)/.test(rp)
       && /const advBody = advRow\.createDiv\(\{ cls: "cb-opt-row" \}\);/,
       "E4（需求4-②）：高级折叠组 summary 只留「高级」两字");
@@ -296,9 +301,11 @@ async function boot(app, modules) {
     const row = bodyOf(cb, "renderEditRow(parent, i) {");
     ok(vo.indexOf("K_DUP") < 0 && rp.indexOf("K_DUP") >= 0 && row.indexOf("K_DUP") < 0,
       "G1（需求4）：看板级行为（允许重复）只在顶栏面板 —— 视图配置与板块编辑都不管");
-    ok(vo.indexOf("K_PROPS") >= 0 && rp.indexOf("K_PROPS") < 0
+    /* R27：显示类的**看板默认**挪进顶栏「内容」组了（addPropsRow / addCharsRow），
+       但板块编辑行那套单独覆盖一个字没动 —— 断言的意图改成「默认在面板、覆盖在行里」。 */
+    ok(rp.indexOf("this.addPropsRow(contentBox)") >= 0 && rp.indexOf("this.addCharsRow(contentBox)") >= 0
       && row.indexOf("cb-input-props") >= 0 && row.indexOf("parseNameList") >= 0,
-      "G2（需求4）：显示类（属性）= 视图给默认值 + 板块可单独覆盖，顶栏面板不掺和");
+      "G2（需求4／R27）：显示类（属性）= 顶栏「内容」组给看板默认 + 板块编辑行仍可单独覆盖");
     ok(row.indexOf("cb-seg") >= 0 && rp.indexOf("cb-seg") < 0,
       "G3（需求4）：板块级三态按钮只在板块编辑行里（顶栏不出现）");
     /* R24（boss 第 3 条）：板块标题旁那块 ⚙ 撤了 → 自绘齿轮现在只剩顶栏那一处用

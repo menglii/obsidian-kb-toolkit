@@ -125,8 +125,12 @@ ok(hr.indexOf("parseFloat(v)") >= 0, "C11：🔴 rg.value 是字符串 —— �
 ok(/for \(const el of \[rg, fk\]\) \{/.test(hr) && hr.indexOf('el.addEventListener("mousedown", (evt) => evt.stopPropagation())') >= 0,
   "C12：🔴 控件 stopPropagation —— 不然外层 closer 把小窗收走");
 ok(cb.indexOf("hrowSec(si, sec);") >= 0, "C13：菜单里真的调了 hrowSec（光定义不接 = 死代码）");
-ok(cb.indexOf("三态项（继承 / 开 / 关）与「文件宽度 / 卡片高度」都只改这一块") >= 0,
+/* R27（boss 第 1 条）：帮助文案重写成「一条一行」（\n 分隔），文字也跟着顺了一下。
+   断言的**意图**不变：板块级清单里必须既有「文件宽度」也有「卡片高度」。 */
+ok(cb.indexOf("三态项（继承 / 开 / 关）与「文件宽度 / 卡片高度」只改这一块") >= 0,
   "C14：「显示帮助」的说明把高度也算进板块级清单");
+ok(cb.indexOf("\\n") >= 0 && cb.indexOf("「新建板块」与「文件操作」是整个看板共用的") >= 0,
+  "C14b：R27 起帮助改成一条一行（\n 分隔）—— 靠 .cb-sec-help 的 white-space: pre-line 才作数");
 
 /* ================= D. 任务勾选框直接点 ================= */
 console.log("\n== R26 · 任务勾选框直接点 ==");

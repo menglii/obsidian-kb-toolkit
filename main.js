@@ -148,6 +148,9 @@ const K_WIDTH = "卡片最小宽度";
 const K_FILL = "空位铺满整行";   // R15：默认开（R14 行为，1fr 撑满）；关 = 卡片固定为滑杆宽度
 const K_SEC_W = "文件宽度";      // R25：**板块级**卡片最小宽度（写在「板块」项里，不是视图配置）；不写 = 继承 K_WIDTH
 const K_SEC_H = "卡片高度";      // R26：**板块级**卡片固定高度；不写 = 同一行拉伸等高、短的留白
+const K_CARD_H = "卡片默认高度";  // R27：**视图级**卡片高度默认（板块没单独设 K_SEC_H 时用它）；不写 = 等高留白
+const K_GAP = "网格间距";         // R27：卡片之间的空隙（px；不写 = 8）
+const K_HIDE_EMPTY = "隐藏空板块"; // R27：一条笔记都没有的板块不渲染（看板更清爽）
 const K_PROPS = "显示属性";     // 字符串（逗号分隔）；空 → 每篇前言前 5 个用户属性
 const K_PROS_OPEN = "属性默认展开";  // R9 键（卡片 / 就地编辑浮层里的属性区是否默认展开，默认 true）；R23 起控件在顶栏面板「看板行为」组；R24 起**板块可各自覆盖**（右键板块 → 通用设置）
 const K_BODY = "显正文";        // boolean；板块未单独指定时的默认
@@ -788,6 +791,9 @@ class CreationBoardView extends BasesViewBase {
     const px = ph.createEl("button", { cls: "cb-panel-x", text: "✕" });
     px.setAttr("title", "关闭");
     px.addEventListener("click", () => this.closePanel());
+    /* R27（boss 第 5 条：面板「稍稍有点空」）：头下面加一条**摘要** ——
+       一眼看清这份看板现在什么状态，面板也不再是「标题+一堆行」的空架子。 */
+    this.panelSubEl = this.panelEl.createDiv({ cls: "cb-panel-sub" });
     this.panelBodyEl = this.panelEl.createDiv({ cls: "cb-panel-body" });
 
     /* 第 5 轮：点面板外面就收起来（⚙ 按钮本身除外，否则会「点了不关」）
@@ -836,6 +842,10 @@ class CreationBoardView extends BasesViewBase {
     if (this.revealTimer) {     // R15：新建笔记的 reveal 轮询一并清
       clearTimeout(this.revealTimer);
       this.revealTimer = null;
+    }
+    if (this.flashTimer) {      // R27：新建卡片的描边定时器
+      clearTimeout(this.flashTimer);
+      this.flashTimer = null;
     }
     this.cancelClick();
     this.unmountEditor(false);
@@ -1054,6 +1064,45 @@ class CreationBoardView extends BasesViewBase {
   /* ============================================================
    * 刷新入口
    * ============================================================ */
+  /** R27：视图级样式变量统一出口 —— 宽度 / 自动铺满 / 卡片默认高度 / 网格间距。
+   *  三个调用点：重绘、编辑器保护快路径、面板拉杆拖动中（只写变量、不动 DOM 树）。 */
+  applyRootVars() {
+    try {
+      const minW = num(this.optNum(K_WIDTH, 240), 240);
+      this.rootEl.style.setProperty("--cb-card-w", minW + "px");
+      /* R15：空位铺满整行开关 —— 开 = 1fr 撑满；关 = 固定为滑杆宽度（滑杆才真的「可调」） */
+      this.rootEl.style.setProperty("--cb-card-max", this.optBool(K_FILL, true) ? "1fr" : minW + "px");
+      /* R27：没设就**删掉变量**（别把默认值写成硬值，否则改看板默认拉不动板块） */
+      const h0 = this.cardHeightDefault();
+      if (h0 !== null) this.rootEl.style.setProperty("--cb-card-h", h0 + "px");
+      else this.rootEl.style.removeProperty("--cb-card-h");
+      const g0 = this.gapOf();
+      if (g0 !== null) this.rootEl.style.setProperty("--cb-gap", g0 + "px");
+      else this.rootEl.style.removeProperty("--cb-gap");
+    } catch (e) {}
+  }
+
+  /** R27：看板默认的卡片高度（null = 没设 → 同一行拉伸等高、短的留白） */
+  cardHeightDefault() {
+    const v = this.cfgGet(K_CARD_H, "");
+    if (v === "" || v === null || v === undefined) return null;
+    return secHeight(v);
+  }
+
+  /** R27：卡片间距（null = 没设 → 用 CSS 里的 8px 兜底） */
+  gapOf() {
+    const v = this.cfgGet(K_GAP, "");
+    if (v === "" || v === null || v === undefined) return null;
+    const g = parseInt(v, 10);
+    if (!isFinite(g)) return null;
+    return Math.max(0, Math.min(24, g));
+  }
+
+  /** R27：「隐藏空板块」开关 */
+  hideEmpty() {
+    return this.optBool(K_HIDE_EMPTY, false);
+  }
+
   computeSig() {
     const d = this.data;
     const parts = [
@@ -1069,6 +1118,9 @@ class CreationBoardView extends BasesViewBase {
       String(this.optBool(K_RO, false)),
       String(this.cfgGet(K_EXCLUDE, "~")),
       String(this.cfgGet(K_CAP, "~")),
+      String(this.optBool(K_HIDE_EMPTY, false)),    /* R27：拨「隐藏空板块」要即时重绘（影响哪些块出现） */
+      String(this.cfgGet(K_GAP, "~")),              /* R27：拨「网格间距」同理 */
+      String(this.cfgGet(K_CARD_H, "~")),           /* R27：拨「卡片默认高度」同理 */
       String(this.optBool(K_HIDDEN_ON, true)),      /* R24：拨「文件隐藏显示」即时重绘 */
       String(this.optBool(K_HIDDEN_SHOW, false)),   /* R24：拨「查看隐藏的文件」同理 */
       String(this.cfgGet(K_HIDDEN, "~")),           /* R24：隐藏 / 取消隐藏某篇 */
@@ -1115,9 +1167,7 @@ class CreationBoardView extends BasesViewBase {
     /* 就地编辑器开着、且条目集合没变 → 别重建，否则会把编辑器连人带光标一起拽掉。
      * R15：但**宽度/铺满这类纯样式选项**要即时生效 —— 只改 CSS 变量，不动编辑器 DOM */
     if (this.editorFor && this.lastPaths && paths === this.lastPaths) {
-      const minW = num(this.optNum(K_WIDTH, 240), 240);
-      this.rootEl.style.setProperty("--cb-card-w", minW + "px");
-      this.rootEl.style.setProperty("--cb-card-max", this.optBool(K_FILL, true) ? "1fr" : minW + "px");
+      this.applyRootVars();   /* R27：这类纯样式项要即时生效，但别把编辑器连光标一起拽掉 */
       this.sig = sig;
       this.renderedOnce = true;
       this.updateBar();
@@ -1468,12 +1518,20 @@ class CreationBoardView extends BasesViewBase {
       return;
     }
 
-    const minW = num(this.optNum(K_WIDTH, 240), 240);
-    this.rootEl.style.setProperty("--cb-card-w", minW + "px");
-    /* R15：空位铺满整行开关 —— 开 = 1fr 撑满（R14 行为）；关 = 固定为滑杆宽度（滑杆真正「可调」） */
-    this.rootEl.style.setProperty("--cb-card-max", this.optBool(K_FILL, true) ? "1fr" : minW + "px");
+    this.applyRootVars();   /* R27：宽度 / 铺满 / 卡片默认高度 / 网格间距 一起写入 */
 
-    for (const sec of this.sections) this.renderSection(this.listEl, sec);
+    /* R27：开着「隐藏空板块」时，一条笔记都没有的板块直接不渲染（省得整屏空壳板块） */
+    const hideEmpty = this.hideEmpty();
+    let shownSec = 0;
+    for (const sec of this.sections) {
+      if (hideEmpty && !(sec.total > 0) && !(sec.entries && sec.entries.length)
+        && !(sec.children && sec.children.length)) continue;
+      shownSec++;
+      this.renderSection(this.listEl, sec);
+    }
+    if (hideEmpty && shownSec === 0) {
+      this.listEl.createDiv({ cls: "cb-empty", text: "所有板块都空着（「隐藏空板块」开着，可在顶栏「板块」面板里关）" });
+    }
 
     /* 重建后把「未落盘」圆点补回来（写入还在队列里的那些） */
     for (const path of this.pending.keys()) this.markDirty(path, true);
@@ -1766,6 +1824,8 @@ class CreationBoardView extends BasesViewBase {
   renderCard(parentEl, entry, sec, childName) {
     const file = entry.file;
     const card = parentEl.createDiv({ cls: "cb-card" });
+    /* R27：新建后紧跟的重绘（reveal）要把「描边」续上，否则一闪就没了 */
+    if (this.flashPath && this.flashPath === file.path) card.addClass("cb-flash");
     if (childName) card.__cbChildName = childName;   // 第 10 轮：手动顺序的键要区分到子板块
     card.setAttr("data-path", file.path);
     card.__cbEntry = entry;
@@ -2286,6 +2346,64 @@ class CreationBoardView extends BasesViewBase {
     this.repaint(false);
   }
 
+  /** R27（boss 第 3 条）：菜单里改完设置**不关窗** —— 按记下的锚点（第几块 + 鼠标处）
+   *  就地重开：窗不动、位置不变，只把控件状态重画一遍（重置项该置灰就置灰、
+   *  三态该变色就变色、打勾项该打勾就打勾）。「点了没反应」和「没生效」必须分得开，
+   *  所以顶上还留一条状态行报最近一次改动（读 saveState）。 */
+  refreshSecMenu() {
+    const a = this.secMenuAnchor;
+    if (!a) return null;
+    /* 🔴 别写 this.sections[a.si]：sections 的顺序 ≠ secs 的顺序（收容所 / 公式会另起
+       一条），只有 srcIndex 是稳定对应关系。 */
+    const sec = this.sections.find((s) => s.srcIndex === a.si) || null;
+    if (!sec) { this.closeSecMenu(); return null; }
+    return this.openSecMenu(sec, a.x, a.y, true);
+  }
+
+  /** R27：右键菜单的「回执」专用通道。
+   *  🔴 不能只写 saveState —— afterChange() 里的 persist() 会把它覆写成
+   *  「已写入 .base」，回执就成了一句废话（真 DOM 冒烟抓到的）。 */
+  note(msg) {
+    this.secMenuStatus = msg;
+    this.saveState = msg;
+  }
+
+  /** R27（boss 第 2 条）：新建之后给那张卡「描边闪一下」——不然一眼找不到新建的那篇。
+   *  · flashPath 记在实例上：创建后紧跟的那次重绘（reveal）也会把类补回去
+   *  · 时长 ~1.6s 后统一摘掉（定时器挂实例，onunload 清） */
+  flashNewCard(path) {
+    if (!path) return;
+    this.flashPath = path;
+    const mark = () => {
+      try {
+        const root = this.rootEl;
+        if (!root || !root.querySelectorAll) return 0;
+        const els = root.querySelectorAll(".cb-card");
+        let k = 0;
+        for (const el of els) {
+          if (el.getAttribute && el.getAttribute("data-path") === path) {
+            if (el.addClass) el.addClass("cb-flash");
+            k++;
+          }
+        }
+        return k;
+      } catch (e) { return 0; }
+    };
+    mark();
+    if (this.flashTimer) clearTimeout(this.flashTimer);
+    this.flashTimer = setTimeout(() => {
+      this.flashTimer = null;
+      this.flashPath = null;
+      try {
+        const root = this.rootEl;
+        if (root && root.querySelectorAll) {
+          const els = root.querySelectorAll(".cb-flash");
+          for (const el of els) if (el.removeClass) el.removeClass("cb-flash");
+        }
+      } catch (e) {}
+    }, 1600);
+  }
+
   closeSecMenu() {
     if (this.secMenuEl) {
       try {
@@ -2295,10 +2413,11 @@ class CreationBoardView extends BasesViewBase {
     }
     this.removeOutsideCloser("secmenu");
     this.unbindMenuEsc();
+    this.secMenuAnchor = null;   /* R27：锚点跟着窗一起失效（否则 closeSecMenu 之后还能「就地重开」） */
   }
 
   /** 右键板块 → 鼠标处弹「板块设置」小窗（跟手弹出、clamp 在视口内、点外面 / Esc 收起） */
-  openSecMenu(sec, x, y) {
+  openSecMenu(sec, x, y, keepMsg) {
     this.closeSecMenu();
     this.closeCardMenu();
     const menu = document.body.createDiv({ cls: "cb-ctxmenu cb-secmenu" });
@@ -2307,6 +2426,13 @@ class CreationBoardView extends BasesViewBase {
     const si = this.secIndexOf(sec);
     const canSec = this.secConfigurable(sec) && si >= 0;
     const secName = sec ? sec.name : "";
+    /* R27：记锚点 —— refreshSecMenu 靠它「就地重开」（si 变了就说明这块没了 → 让它关） */
+    this.secMenuAnchor = si >= 0 ? { si: si, x: x, y: y } : null;
+    if (!keepMsg) this.secMenuStatus = "";
+    if (this.secMenuStatus) {
+      const st = menu.createDiv({ cls: "cb-ctx-status", text: this.secMenuStatus });
+      st.setAttr("title", "刚刚改的那一项");
+    }
 
     const run = (fn) => {
       this.closeSecMenu();
@@ -2376,8 +2502,12 @@ class CreationBoardView extends BasesViewBase {
           const nv = pair[0] === "" ? null : pair[0] === "true";
           if (this.secs[si][field] === nv) return;
           this.secs[si][field] = nv;
+          /* R27：跟 wrowSec / hrowSec / chk 一样记一笔 —— 不然「不关窗 + 顶上回执」
+             在三态项上就是空的（老板第 3 条要的就是「点了到底生效没」一眼分得开）。 */
+          this.note("「" + secName + "」" + label + " → "
+            + (nv === null ? "继承" : nv ? "开" : "关"));
           this.afterChange();
-          this.closeSecMenu();
+          this.refreshSecMenu();
         });
       }
     };
@@ -2440,9 +2570,9 @@ class CreationBoardView extends BasesViewBase {
       rg.addEventListener("change", () => {
         const n = Math.max(160, Math.min(480, Math.round(wnum2(rg.value) / 10) * 10));
         this.secs[si2].secW = n;
-        this.saveState = "「" + secName + "」文件宽度 → " + n + " px";
+        this.note("「" + secName + "」文件宽度 → " + n + " px");
         this.afterChange();
-        this.closeSecMenu();
+        this.refreshSecMenu();
       });
       fk.addEventListener("click", (evt) => {
         evt.preventDefault();
@@ -2450,13 +2580,13 @@ class CreationBoardView extends BasesViewBase {
         if (isFollow()) {                    /* 勾 → 不勾：把当前拉杆值写成这一块的覆盖 */
           const n = Math.max(160, Math.min(480, Math.round(wnum2(rg.value) / 10) * 10));
           this.secs[si2].secW = n;
-          this.saveState = "「" + secName + "」文件宽度 → " + n + " px";
+          this.note("「" + secName + "」文件宽度 → " + n + " px");
         } else {                             /* 不勾 → 勾：删掉覆盖，回继承看板 */
           this.secs[si2].secW = null;
-          this.saveState = "「" + secName + "」文件宽度 → 跟随看板";
+          this.note("「" + secName + "」文件宽度 → 跟随看板");
         }
         this.afterChange();
-        this.closeSecMenu();
+        this.refreshSecMenu();
       });
       paint();
       return row;
@@ -2505,9 +2635,9 @@ class CreationBoardView extends BasesViewBase {
       rg.addEventListener("change", () => {
         const n = Math.max(120, Math.min(480, Math.round(hnum2(rg.value) / 10) * 10));
         this.secs[si2].secH = n;
-        this.saveState = "「" + secName + "」卡片高度 → " + n + " px";
+        this.note("「" + secName + "」卡片高度 → " + n + " px");
         this.afterChange();
-        this.closeSecMenu();
+        this.refreshSecMenu();
       });
       fk.addEventListener("click", (evt) => {
         evt.preventDefault();
@@ -2515,13 +2645,13 @@ class CreationBoardView extends BasesViewBase {
         if (isFollowH()) {
           const n = Math.max(120, Math.min(480, Math.round(hnum2(rg.value) / 10) * 10));
           this.secs[si2].secH = n;
-          this.saveState = "「" + secName + "」卡片高度 → " + n + " px";
+          this.note("「" + secName + "」卡片高度 → " + n + " px");
         } else {
           this.secs[si2].secH = null;
-          this.saveState = "「" + secName + "」卡片高度 → 跟随内容";
+          this.note("「" + secName + "」卡片高度 → 跟随内容");
         }
         this.afterChange();
-        this.closeSecMenu();
+        this.refreshSecMenu();
       });
       paintH();
       return row;
@@ -2537,14 +2667,27 @@ class CreationBoardView extends BasesViewBase {
       el.addEventListener("click", (evt) => {
         evt.preventDefault();
         evt.stopPropagation();
-        this.cfgSet(key, !this.optBool(key, dflt));
+        const nv = !this.optBool(key, dflt);
+        this.cfgSet(key, nv);
+        this.note("「" + label + "」→ " + (nv ? "开" : "关"));
         this.repaint(false);
-        this.closeSecMenu();
+        this.refreshSecMenu();
       });
       return el;
     };
 
     item("刷新", () => this.refreshBoard());
+    /* R27（boss 第 4 条）：刷新下面加「收起 / 展开当前板块」—— 不必去点标题旁那个小三角。
+       标签跟着当前折叠状态走；点完**不关窗**（跟第 3 条同一条规矩），就地刷新标签。 */
+    if (canSec) {
+      const isCol = this.isCollapsed(sec, null, false);
+      itemStay(isCol ? "展开本板块" : "收起本板块", () => {
+        this.setCollapsed(sec, null, !isCol);
+        this.note("「" + secName + "」已" + (isCol ? "展开" : "收起"));
+        this.afterChange();
+        this.refreshSecMenu();
+      });
+    }
     menu.createDiv({ cls: "cb-ctx-sep" });
 
     if (canSec) {
@@ -2554,18 +2697,38 @@ class CreationBoardView extends BasesViewBase {
       wrowSec(si, sec);   // R25：板块级「文件宽度」（跟随看板 = 不写覆盖）
       hrowSec(si, sec);   // R26：板块级「卡片高度」（跟随内容 = 不写覆盖，同一行拉伸等高）
       const has = this.secHasOverride(si);
-      item(has ? "重置设置" : "重置设置（已是默认）", () => this.resetSection(si), !has);
+      /* R27：重置也**不关窗** —— 重置完这一行立刻变成「已是默认」并置灰，就地看得见结果 */
+      const resetEl = menu.createDiv({ cls: "cb-ctx-item" + (has ? "" : " is-disabled") });
+      resetEl.setAttr("data-act", "重置设置");
+      resetEl.setText(has ? "重置设置" : "重置设置（已是默认）");
+      resetEl.setAttr("title", "把这个板块的单独设置全部清掉，回到「跟随看板」默认");
+      if (has) {
+        resetEl.addEventListener("mousedown", (evt) => evt.stopPropagation());
+        resetEl.addEventListener("click", (evt) => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          this.resetSection(si);       /* 内部已经 saveState + afterChange */
+          this.note("已重置「" + secName + "」（回继承视图默认）");
+          this.refreshSecMenu();
+        });
+      } else {
+        resetEl.setAttr("aria-disabled", "true");
+      }
       let helpOpen = false;
       const helpBox = menu.createDiv({ cls: "cb-sec-help" });
       helpBox.toggleClass("is-hidden", true);
       itemStay("显示帮助", () => {
         helpOpen = !helpOpen;
         helpBox.toggleClass("is-hidden", !helpOpen);
-        helpBox.setText("「" + secName + "」：数据源 " + (sec.spec.source || "") + "，"
-          + "三态项（继承 / 开 / 关）与「文件宽度 / 卡片高度」都只改这一块；"
-          + "双击板块名可改名，拖动标题可排序；"
-          + "「本板块」组里的新建文件 / 删除也只动这一块，"
-          + "「新建板块」与「文件操作」是整个看板共用的。");
+        /* R27（boss 第 1 条）：**一条一行** —— 原来整段挤成一坨，断行位置随机、读不动。
+           CSS 侧 .cb-sec-help 给了 white-space: pre-line，这里的 \n 才作数。 */
+        helpBox.setText(
+          "「" + secName + "」　数据源 " + (sec.spec.source || "") + "\n"
+          + "· 三态项（继承 / 开 / 关）与「文件宽度 / 卡片高度」只改这一块\n"
+          + "· 单击板块名可改名，拖动标题可排序\n"
+          + "· 「本板块」组里的新建文件 / 删除也只动这一块\n"
+          + "· 「新建板块」与「文件操作」是整个看板共用的"
+        );
       });
 
       menu.createDiv({ cls: "cb-ctx-sep" });
@@ -3982,6 +4145,7 @@ class CreationBoardView extends BasesViewBase {
     this.lastCreate = { path, folder, why: res.why, ok: true, bytes: 0 };
     new Notice("创作看板：已新建 " + path + "\n落点依据：" + res.why, 5000);
     this.insertTempCard(gridEl, path);
+    this.flashNewCard(path);      /* R27（boss 第 2 条）：描边闪一下，一眼看见新建的那篇 */
     this.scheduleReveal(path);
     this.updateBar();
     return path;
@@ -4086,6 +4250,12 @@ class CreationBoardView extends BasesViewBase {
     view[K_HIDDEN_ON] = this.optBool(K_HIDDEN_ON, true);
     view[K_HIDDEN_SHOW] = this.optBool(K_HIDDEN_SHOW, false);
     view[K_HIDDEN] = this.hiddenPaths();
+    /* R27：三个新键也要跟着搬（这里原本漏了 —— 自检才发现）。
+       间距 / 卡片默认高度只在**显式设过**时导出：没设过 = 用 CSS 兜底 8px / 跟随内容，
+       把这份「没用过」固化进 .base 反而会掐死以后改看板默认。 */
+    if (this.gapOf() !== null) view[K_GAP] = this.gapOf();
+    if (this.cardHeightDefault() !== null) view[K_CARD_H] = this.cardHeightDefault();
+    view[K_HIDE_EMPTY] = this.optBool(K_HIDE_EMPTY, false);
     return JSON.stringify({ _版本: 4, 视图: view, 板块: this.secs.map(sectionToRaw) }, null, 2);
   }
 
@@ -4201,6 +4371,8 @@ class CreationBoardView extends BasesViewBase {
       kinds[K_BODY] = "bool"; kinds[K_CHARS] = "num"; kinds[K_RO] = "bool";
       kinds[K_EXCLUDE] = "raw"; kinds[K_CAP] = "num"; kinds[K_FILL] = "bool"; kinds[K_PROS_OPEN] = "bool";
       kinds[K_HIDDEN_ON] = "bool"; kinds[K_HIDDEN_SHOW] = "bool"; kinds[K_HIDDEN] = "raw";
+      /* R27：跟导出对称 —— 少了这三行，搬进来的配置会被静默丢掉 */
+      kinds[K_GAP] = "num"; kinds[K_CARD_H] = "num"; kinds[K_HIDE_EMPTY] = "bool";
       for (const k of Object.keys(view)) {
         const kind = kinds[k];
         if (!kind) continue;
@@ -4238,6 +4410,7 @@ class CreationBoardView extends BasesViewBase {
     this.panelBodyEl.empty();
     this.panelMsgEl.setText(this.saveState || "");
     this.panelMsgEl.toggleClass("is-err", /失败|不能|冲突/.test(this.saveState || ""));
+    if (this.panelSubEl) this.panelSubEl.setText(this.panelSummary());
 
     /* R20 需求4-②（boss：重新设计、大幅简化、改成开关样式、无冗余文字说明）：
      * 面板只分三段 —— 「看板行为 / 板块 / 高级」。开关一律原生胶囊
@@ -4248,6 +4421,10 @@ class CreationBoardView extends BasesViewBase {
      * 合不成「文件宽度 [拉杆] 240 px  自动 [开关]」。键与语义一个没变（K_WIDTH / K_FILL）。 */
     const cardBox = this.addGroup("卡片");
     this.addWidthRow(cardBox);
+    /* R27：跟「文件宽度」同一个台面/同一套语言的两行 —— 间距与默认高度
+       （R26 的板块级「卡片高度」是**覆盖**，这里是不覆盖时的**看板默认**） */
+    this.addGapRow(cardBox);
+    this.addCardHeightRow(cardBox);
 
     const behBox = this.addGroup("看板行为");
     this.addToggle(behBox, K_DUP, true, "允许重复", "一条笔记可以同时出现在多个板块里");
@@ -4256,6 +4433,8 @@ class CreationBoardView extends BasesViewBase {
       "未被任何板块命中的笔记归到「收容所」板块。没单独设过时跟随插件设置（插件里现在=" +
         (this.pluginCatchDefault() ? "显示" : "隐藏") + "）"
     );
+    this.addToggle(behBox, K_HIDE_EMPTY, false, "隐藏空板块",
+      "一条笔记都没有的板块不显示（右上角「共 N 篇」照旧把全部算在内）");
     this.addToggle(behBox, K_BODY, false, "显正文", "板块没单独指定正文开关时的默认值");
     /* R23（boss：加一个开关控制笔记的属性是否默认展开）：键还是老的 K_PROS_OPEN（R9 就有），
      * 只是从原生视图选项面板挪到这儿 —— 挨着「显正文」（一个管正文、一个管属性）。 */
@@ -4263,7 +4442,24 @@ class CreationBoardView extends BasesViewBase {
       "卡片 / 就地编辑浮层里的属性区默认展开；关 = 默认折叠（每张卡片上的「属性 ▸」仍可单独展开）");
     this.addToggle(behBox, K_RO, false, "只读", "关掉看板上全部就地编辑（＝顶栏那把锁）");
 
+    /* R27（boss 第 5 条）：面板里的「内容」组 —— 这两项原来只在 Bases 原生视图选项里
+       （键与语义一个没变，跟 R21 搬宽度、R23 搬属性展开一个套路），现在收进自绘面板：
+       「显示属性」是文本，「正文上限」是拉杆（0 = 不截断）。 */
+    const contentBox = this.addGroup("内容");
+    this.addPropsRow(contentBox);
+    this.addCharsRow(contentBox);
+
     const secBox = this.addGroup("板块");
+    /* R27：板块多的时候，一键全收 / 全开（跟右键菜单第 4 条同一个主题） */
+    if (this.secs.length > 0) {
+      const bulk = secBox.createDiv({ cls: "cb-bulk" });
+      const bOpen = bulk.createEl("button", { cls: "cb-mini cb-bulk-open", text: "全部展开" });
+      bOpen.setAttr("title", "把所有板块展开");
+      bOpen.addEventListener("click", () => this.setAllCollapsed(false));
+      const bShut = bulk.createEl("button", { cls: "cb-mini cb-bulk-shut", text: "全部收起" });
+      bShut.setAttr("title", "把所有板块收起（只留标题行）");
+      bShut.addEventListener("click", () => this.setAllCollapsed(true));
+    }
     const list = secBox.createDiv({ cls: "cb-panel-list" });
     if (this.secs.length === 0) {
       list.createDiv({ cls: "cb-hint", text: "还没有板块，点「＋ 添加」开始；不配板块时沿用 base 的自动分组。" });
@@ -4412,6 +4608,144 @@ class CreationBoardView extends BasesViewBase {
     if (this.ioState) box.createDiv({ cls: "cb-io-msg", text: this.ioState });
   }
 
+  /** R27：面板头的摘要（N 篇 · M 个板块 · 正文开 / 关 · 只读） */
+  panelSummary() {
+    try {
+      const all = this.data && Array.isArray(this.data.data) ? this.data.data : [];
+      const bits = [all.length + " 篇笔记", this.secs.length + " 个板块"];
+      bits.push(this.optBool(K_BODY, false) ? "正文开" : "正文关");
+      if (this.hideEmpty()) bits.push("隐藏空板块");
+      bits.push(this.readonly() ? "只读" : "可编辑");
+      return bits.join(" · ");
+    } catch (e) { return ""; }
+  }
+
+  /** R27：一键把所有板块收起 / 展开（写的是同一个 K_FOLD 折叠表，跟点小三角完全等价） */
+  setAllCollapsed(v) {
+    let k = 0;
+    for (let i = 0; i < this.secs.length; i++) {
+      const sec = this.sections.find((x) => x.srcIndex === i) || null;
+      if (!sec) continue;
+      this.setCollapsed(sec, null, v);
+      k++;
+    }
+    this.saveState = (v ? "已收起 " : "已展开 ") + k + " 个板块";
+    this.afterChange();
+    this.renderPanel();
+  }
+
+  /** R27：面板里的「一行拉杆」通用件 —— 左标签 + 原生 range（吃 --cb-wpct 渐变）+ 右侧回显。
+   *  返回 {row, rg, val, paint, num}；写盘 / 联动交给调用方（拖动中只写 CSS 变量，不动 DOM）。 */
+  _sliderRow(parent, label, tip, min, max, step, value, fmt) {
+    const row = parent.createDiv({ cls: "cb-wrow" });
+    const lb = row.createSpan({ cls: "cb-wlb", text: label });
+    lb.setAttr("title", tip || "");
+    const rg = row.createEl("input", { cls: "cb-wrange", type: "range" });
+    rg.setAttr("min", String(min));
+    rg.setAttr("max", String(max));
+    rg.setAttr("step", String(step));
+    rg.value = String(value);
+    const val = row.createSpan({ cls: "cb-wval", text: fmt(parseFloat(rg.value)) });
+    /* ⚠️ 跟 R21/r25 同一个坑：rg.value 是**字符串**，num() 只认 number → 一律 parseFloat 兜底 */
+    const rd = () => { const v = parseFloat(rg.value); return isFinite(v) ? v : value; };
+    const paint = () => {
+      rg.style.setProperty("--cb-wpct", (((rd() - min) / (max - min)) * 100).toFixed(1) + "%");
+      val.setText(fmt(rd()));
+    };
+    paint();
+    return { row: row, rg: rg, val: val, paint: paint, read: rd };
+  }
+
+  /** R27：网格间距（K_GAP）—— 拖动中直写 --cb-gap，松手落盘 */
+  addGapRow(parent) {
+    const g0 = this.gapOf();
+    const r = this._sliderRow(parent, "网格间距", "卡片之间的空隙（0 – 24 px；默认 8）",
+      0, 24, 2, g0 === null ? 8 : g0, (v) => v + " px");
+    r.rg.addEventListener("input", () => {
+      r.paint();
+      this.rootEl.style.setProperty("--cb-gap", r.read() + "px");
+    });
+    r.rg.addEventListener("change", () => {
+      const g = Math.max(0, Math.min(24, Math.round(r.read() / 2) * 2));
+      this.cfgSet(K_GAP, g);
+      this.saveState = "网格间距 → " + g + " px";
+      this.repaint(false);
+    });
+  }
+
+  /** R27：看板默认卡片高度（K_CARD_H）—— 「跟随内容」勾上 = 不设默认（等高留白） */
+  addCardHeightRow(parent) {
+    const isFollow = () => this.cardHeightDefault() === null;
+    const cur = this.cardHeightDefault();
+    const r = this._sliderRow(parent, "卡片高度", "看板默认高度（120 – 480 px）；板块没单独设时用它",
+      120, 480, 10, cur === null ? 260 : cur, (v) => v + " px");
+    const sw = r.row.createEl("label", { cls: "checkbox-container" });
+    const cb = sw.createEl("input", { cls: "cb-opt-box", type: "checkbox" });
+    cb.checked = isFollow();
+    sw.setAttr("title", "跟随内容 = 看板不设默认高度：同一行卡片拉伸等高、短的留白");
+    const lab = r.row.createEl("label", { cls: "cb-opt-label", text: "跟随内容" });
+    const paint = () => {
+      r.paint();
+      const f = isFollow();
+      r.rg.disabled = f;
+      r.val.style.opacity = f ? "0.4" : "1";
+    };
+    const face = () => {
+      cb.checked = isFollow();
+      paint();
+    };
+    const commit = (v) => {
+      if (v === null) this.cfgSet(K_CARD_H, null);
+      else this.cfgSet(K_CARD_H, Math.max(120, Math.min(480, Math.round(v / 10) * 10)));
+      this.saveState = v === null ? "卡片高度 → 跟随内容（等高留白）" : "卡片高度 → " + v + " px";
+      this.repaint(false);
+      face();
+    };
+    r.rg.addEventListener("input", () => {
+      if (isFollow()) return;
+      r.paint();
+      this.rootEl.style.setProperty("--cb-card-h", r.read() + "px");
+    });
+    r.rg.addEventListener("change", () => commit(r.read()));
+    const flip = () => commit(isFollow() ? r.read() : null);
+    cb.addEventListener("change", flip);
+    lab.addEventListener("click", () => { cb.checked = !cb.checked; flip(); });
+    paint();
+  }
+
+  /** R27：正文上限（K_CHARS）—— 0 = 不截断（原「正文字数」键，从原生视图选项搬来） */
+  addCharsRow(parent) {
+    const cur = Math.max(0, Math.floor(this.optNum(K_CHARS, DEFAULT_CHARS)));
+    const r = this._sliderRow(parent, "正文上限", "卡片正文最多显示多少字；0 = 不截断（正文区自己滚）",
+      0, 400, 20, Math.min(cur, 400), (v) => (v <= 0 ? "不截断" : v + " 字"));
+    r.rg.addEventListener("input", () => r.paint());
+    r.rg.addEventListener("change", () => {
+      const v = Math.max(0, Math.min(400, Math.round(r.read() / 20) * 20));
+      this.cfgSet(K_CHARS, v);
+      this.saveState = v <= 0 ? "正文上限 → 不截断" : "正文上限 → " + v + " 字";
+      this.repaint(false);
+    });
+  }
+
+  /** R27：显示属性（K_PROPS）—— 逗号分隔；留空 = 每篇前言前 5 个（原键，从原生视图选项搬来） */
+  addPropsRow(parent) {
+    const row = parent.createDiv({ cls: "cb-field" });
+    const lb = row.createSpan({ cls: "cb-field-label", text: "显示属性" });
+    lb.setAttr("title", "逗号分隔；留空 = 每篇笔记前言里的前 5 个用户属性");
+    const inp = row.createEl("input", { cls: "cb-text cb-props-text", type: "text" });
+    inp.value = String(this.cfgGet(K_PROPS, ""));
+    inp.setAttr("placeholder", "简介, 平台, 状态");
+    const commit = () => {
+      const v = String(inp.value == null ? "" : inp.value).trim();
+      if (v === String(this.cfgGet(K_PROPS, "")).trim()) return;
+      this.cfgSet(K_PROPS, v);
+      this.saveState = "显示属性 → " + (v || "（自动：前 5 个）");
+      this.repaint(false);
+    };
+    inp.addEventListener("change", commit);
+    inp.addEventListener("blur", commit);
+  }
+
   /* R20 需求4-②：一行开关 = 「短标签 + 原生胶囊」；解释文字走 title，面板里不铺小字 */
   addToggle(parent, key, dflt, label, tip) {
     const row = parent.createDiv({ cls: "cb-opt" });
@@ -4474,6 +4808,12 @@ class CreationBoardView extends BasesViewBase {
     if (sec.props && sec.props.length) row.createSpan({ cls: "cb-badge", text: "属性 " + sec.props.length });
     /* 第 4 轮：板块级排序 */
     if (sec.sort) row.createSpan({ cls: "cb-badge", text: "排序 " + (SORT_LABEL[sec.sort] || sec.sort) });
+    /* R27：这一块被单独调过（宽度 / 高度 / 三态 / 属性 / 排序…）→ 标一下，
+       不然「重置设置」为什么可用、别的块为什么不一样，光看列表看不出来 */
+    if (this.secHasOverride(i)) {
+      const ov = row.createSpan({ cls: "cb-badge cb-badge-ovr", text: "已自定义" });
+      ov.setAttr("title", "这一块有自己的设置（右键板块 → 通用设置，可一键重置）");
+    }
 
     /* 条数（面板先算 sections，所以这里拿得到） */
     const hit = this.sections.reduce((a, s) => a + (s.srcIndex === i ? s.total : 0), 0);
@@ -4977,18 +5317,13 @@ class CreationBoardView extends BasesViewBase {
    * ⚠️ 没有多选控件 → 「显示属性」用 text（逗号分隔）
    */
   static getViewOptions(config) {
-    const readBool = (key) => {
-      try {
-        const v = config && typeof config.get === "function" ? config.get(key) : undefined;
-        return v === true || v === "true";
-      } catch (e) {
-        return false;
-      }
-    };
+    /* R27：显示属性 / 正文字数搬进顶栏「内容」组后，原来只给「正文字数上限」的
+       shouldHide 用的 readBool 助手就没人用了 —— 一并摘掉，别留死代码。 */
     return [
-      { displayName: "显示属性（逗号分隔；留空 = 每篇前言前 5 个）", type: "text", key: K_PROPS, default: "", placeholder: "简介, 平台, 状态" },
       { displayName: "显正文（板块没单独指定时的默认）", type: "toggle", key: K_BODY, default: false },
-      { displayName: "正文字数上限（0 = 不截断，正文区自己滚）", type: "number", key: K_CHARS, min: 0, max: 50000, step: 50, default: DEFAULT_CHARS, instant: true, shouldHide: () => !readBool(K_BODY) },
+      /* R27：显示属性（K_PROPS）与正文字数（K_CHARS）也搬到顶栏「板块设置」的「内容」组
+       * （跟 R21 的宽度、R23 的属性展开一个套路：**键与语义一个没变**，只是台面换了；
+       *  自绘面板一条能放「标签 + 拉杆 + 回显」，原生面板一条 descriptor 放不下）。 */
       /* R20：以上是「显示外观」。只读 / 允许重复 / 显示收容所 / 排除目录 / 总条数上限
        * 已移出本面板 —— 在顶栏「板块」里改（同一份 .base 配置，键名一个没变）。
        * R21：卡片最小宽度 + 空位铺满整行（K_WIDTH / K_FILL）也移走了 —— 顶栏「卡片」组里

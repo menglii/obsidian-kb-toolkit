@@ -86,14 +86,16 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
   ok(vo.indexOf("属性默认展开") < 0, "B3：连 displayName 残留都没有");
 
   const keys = (vo.match(/key: K_\w+/g) || []).map((s) => s.replace("key: ", "")).sort();
-  eq(keys.join(","), "K_BODY,K_CHARS,K_PROPS",
-    "B4：原生面板只剩 3 个显示类项（「显示属性 / 显正文 / 正文字数上限」）");
+  /* R27：「显示属性」「正文字数」也搬进顶栏「内容」组 → 原生面板只剩「显正文」 */
+  eq(keys.join(","), "K_BODY",
+    "B4（R27）：原生面板只剩「显正文」（属性 / 字数已挪进顶栏「内容」组）");
 
   ok(/const K_PROS_OPEN = "属性默认展开"/.test(cb),
     "B5：键字面量原样保留（老 .base 写过「属性默认展开」的照认）");
-  /* 摘项别把助手变成死代码 */
-  ok(/shouldHide:\s*\(\)\s*=>\s*!readBool\(K_BODY\)/.test(vo),
-    "B6：readBool 助手仍被「正文字数上限」的 shouldHide 用着（没摘成死代码）");
+  /* 摘项别把助手变成死代码：R27 把「正文字数」也搬走之后，readBool 彻底没人用 →
+     正确的处置是**摘掉**，而不是留在原生面板里当摆设。 */
+  ok(vo.indexOf("readBool") < 0,
+    "B6（R27）：readBool 助手随「正文字数」一起摘掉（不留死代码）");
 }
 
 /* ================= C. computeSig 认它 → 拨完即时重绘（本轮真正的坑） ================= */

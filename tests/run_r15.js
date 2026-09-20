@@ -43,9 +43,13 @@ const cbCss = fs.readFileSync(path.join(PLUG, "styles_src", "cb.css"), "utf8");
     && /ib\.checked = this\.optBool\(K_FILL, true\)/.test(cb)
     && cb.indexOf("this.cfgSet(K_FILL, v)") >= 0,
     "A3：「空位铺满整行」缩成「自动」+ 胶囊开关，与拉杆同一行（默认开 = R14 行为）");
-  ok((cb.match(/--cb-card-max/g) || []).length >= 2
-    && (cb.match(/\? "1fr" : minW \+ "px"/g) || []).length >= 2,
-    "A4：渲染与编辑器保护两条路都写 --cb-card-max（1fr / 滑杆宽度）");
+  /* R27：「重绘」与「编辑器保护」原来各写一遍根变量 —— 现在统一收进 applyRootVars()。
+     断言的**意图没变**：--cb-card-max 必须真的被写（1fr / 滑杆宽度两种形态都在）。 */
+  ok((cb.match(/--cb-card-max/g) || []).length >= 1
+    && (cb.match(/\? "1fr" : minW \+ "px"/g) || []).length >= 1,
+    "A4：--cb-card-max（1fr / 滑杆宽度）仍真写（R27 起由 applyRootVars 一个出口）");
+  ok((cb.match(/this\.applyRootVars\(\);/g) || []).length >= 2,
+    "A4b（R27）：重绘 + 编辑器保护两条路都调 applyRootVars（不再各写一遍）");
   ok(/minmax\(var\(--cb-card-w\),\s*var\(--cb-card-max,\s*1fr\)\)/.test(cbCss)
     && /--cb-card-max:\s*1fr;/.test(cbCss), "A5：cb.css 栅格吃 --cb-card-max 且有默认值");
   ok(cb.indexOf("String(this.optBool(K_FILL, true))") >= 0, "A6：computeSig 认 K_FILL（拨开关即重绘）");

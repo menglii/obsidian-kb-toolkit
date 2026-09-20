@@ -123,9 +123,11 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
     || rs.indexOf("evt.preventDefault()") >= 0,
     "C2：拦掉浏览器原生右键菜单（不然两个菜单一起弹）");
 
-  ok(count(/openSecMenu\(sec, x, y\) \{/g, cb) === 1, "C3：openSecMenu 只定义 1 次（复写病自检）");
+  /* R27：签名多了第 4 个形参 keepMsg（true = 就地重开、把窗留着）—— 计数串跟着改，
+     但这条断言的**意图没变**：openSecMenu 仍然只许定义一次（复写病自检）。 */
+  ok(count(/openSecMenu\(sec, x, y, keepMsg\) \{/g, cb) === 1, "C3：openSecMenu 只定义 1 次（复写病自检）");
   ok(count(/closeSecMenu\(\) \{/g, cb) === 1, "C4：closeSecMenu 只定义 1 次（复写病自检）");
-  const om = bodyOf(cb, "openSecMenu(sec, x, y) {");
+  const om = bodyOf(cb, "openSecMenu(sec, x, y, keepMsg) {");
   ok(om.length > 0, "C5：openSecMenu 方法体定位得到");
   ok(om.indexOf('cls: "cb-ctxmenu cb-secmenu"') >= 0,
     "C6：复用卡片右键菜单那套 .cb-ctxmenu（加 .cb-secmenu 细化），不另搓一套定位");
@@ -313,7 +315,10 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
   /* 零裸色：只查 R24 那一整段 */
   const iR24 = cssRaw.indexOf("R24（boss：「单个板块的设置应只对单独板块生效」）");
   ok(iR24 > 0, "G4：cb.css 找得到 R24 段");
-  const blk = iR24 > 0 ? stripComments(cssRaw.slice(iR24)) : "";
+  /* R27：本段要切到**下一段头**为止 —— 原来切到文件尾，R25/R26/R27 追加进来的样式
+     全被算成 R24 的（R27 的 color-mix 兜底值写了 transparent → G6 假红）。 */
+  const iR24End = cssRaw.indexOf("R25（boss：右键菜单里新增");
+  const blk = iR24 > 0 ? stripComments(cssRaw.slice(iR24, iR24End > iR24 ? iR24End : cssRaw.length)) : "";
   const noVar = blk.replace(/var\([^)]*\)/g, "VAR");
   const bare = noVar.match(/#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/g) || [];
   eq(bare.length, 0, "G5：R24 段零裸色（实到 " + JSON.stringify(bare) + "）");
@@ -333,14 +338,14 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
     && /const K_HIDDEN = "隐藏的文件"/.test(cb),
     "H5：键字面量 = 老板原话里那三个词（.base 手写也照认）");
   /* main.js 是 build 时按字节内嵌 vendor 的 → 抽查几处代表签名 */
-  ok(mainJs.indexOf("openSecMenu(sec, x, y) {") >= 0 && mainJs.indexOf("beginRenameSection(sec, nameEl) {") >= 0,
+  ok(mainJs.indexOf("openSecMenu(sec, x, y, keepMsg) {") >= 0 && mainJs.indexOf("beginRenameSection(sec, nameEl) {") >= 0,
     "H6：main.js 内嵌的看板 == vendor 原件（构建已跟上，不是只改了源）");
   ok(mainJs.indexOf("cb-sec-gear") < 0, "H7：main.js 里也找不到 cb-sec-gear（撤干净了）");
 }
 
 /* ================= I. 复写病整段自检（整文件级） ================= */
 {
-  eq(count(/^  openSecMenu\(sec, x, y\) \{/gm, cb), 1, "I1：openSecMenu 定义恰 1 次");
+  eq(count(/^  openSecMenu\(sec, x, y, keepMsg\) \{/gm, cb), 1, "I1：openSecMenu 定义恰 1 次");
   eq(count(/^  closeSecMenu\(\) \{/gm, cb), 1, "I2：closeSecMenu 定义恰 1 次");
   eq(count(/^  beginRenameSection\(sec, nameEl\) \{/gm, cb), 1, "I3：beginRenameSection 定义恰 1 次");
   eq(count(/^  renameSection\(i, nv\) \{/gm, cb), 1, "I4：renameSection 定义恰 1 次");

@@ -56,8 +56,13 @@ const cb = stripComments(cbRaw);
 const cssRaw = fs.readFileSync(path.join(PLUG, "styles_src", "cb.css"), "utf8");
 const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
 
-/* R25 的 CSS 段（从段落标题到文件尾） */
-const cssSeg = cssRaw.slice(cssRaw.indexOf("R25（boss：右键菜单里新增"));
+/* R25 的 CSS 段（从本段标题到**下一段标题**）——
+   R27 在后面又追加了一段，所以不能再切到文件尾：那样 R27 的样式会被当成 R25 的
+   去体检（G8 零裸色会误报），而 R25 自己的规则漏检也看不出来。
+   R27 段的零裸色由 tests/run_r27.js 自己管。 */
+const CSS_R25_END = cssRaw.indexOf("R27（boss 5 条 + 延伸）");
+const cssSeg = cssRaw.slice(cssRaw.indexOf("R25（boss：右键菜单里新增"),
+  CSS_R25_END > 0 ? CSS_R25_END : cssRaw.length);
 
 /* ================= A. 配置层：板块级「文件宽度」这把键 ================= */
 console.log("\n== R25 · 配置层：板块级「文件宽度」==");
@@ -140,7 +145,8 @@ ok(rs.indexOf("rootEl.style.setProperty") < 0,
 /* ================= C. 菜单里那一行「文件宽度」 ================= */
 console.log("\n== R25 · 右键菜单：「文件宽度」一行 ==");
 
-const om = bodyOf(cb, "openSecMenu(sec, x, y) {");
+/* R27：签名多了第 4 个形参 keepMsg（就地重开用）—— 定位串跟着改，意图不变 */
+const om = bodyOf(cb, "openSecMenu(sec, x, y, keepMsg) {");
 ok(om.length > 0, "C1：openSecMenu 定位得到");
 ok(count(/const wrowSec = \(si2, secObj\) => \{/g, cb) === 1, "C2：wrowSec 只定义 1 次（复写病自检）");
 ok(om.indexOf("wrowSec(si, sec);") >= 0, "C3：通用设置组里调了它");
@@ -183,8 +189,11 @@ ok(/if \(!this\.optBool\(K_FILL, true\)\) we\.style\.setProperty\("--cb-card-max
 const wrChange = wr.slice(wr.indexOf('rg.addEventListener("change"'), wr.indexOf("const apply = (follow)"));
 ok(/const n = Math\.max\(160, Math\.min\(480, Math\.round\(wnum2\(rg\.value\) \/ 10\) \* 10\)\);\s*\n\s*this\.secs\[si2\]\.secW = n;/.test(wrChange),
   "C19：松手落盘：先夹到 160–480 再写 secW");
-ok(wrChange.indexOf("this.afterChange();") >= 0 && wrChange.indexOf("this.closeSecMenu();") >= 0,
-  "C20：落盘走 afterChange（persist + repaint）+ 收起小窗");
+/* R27（boss 第 3 条：改完别关窗）：wrowSec 的 change 处理器从「落盘 + 收窗」
+   改成「落盘 + refreshSecMenu()」—— 窗留着、控件状态就地重画。
+   断言的**意图**仍是「落盘必须走 afterChange 这条唯一通路」，第二半换成新归宿。 */
+ok(wrChange.indexOf("this.afterChange();") >= 0 && wrChange.indexOf("this.refreshSecMenu();") >= 0,
+  "C20：落盘走 afterChange（persist + repaint）+ 小窗就地刷新（R27 起不关窗）");
 
 const wrApply = wr.slice(wr.indexOf('fk.addEventListener("click"'));
 ok(wrApply.length > 0, "C20b：「跟随看板」有 click 处理器");
@@ -192,7 +201,9 @@ ok(/this\.secs\[si2\]\.secW = null;/.test(wrApply),
   "C21：勾上「跟随看板」→ secW = null（真删掉覆盖，不是写个等于默认的数）");
 ok(/this\.secs\[si2\]\.secW = n;/.test(wrApply),
   "C21b：取消勾 → 把当前拉杆值写成这一块的覆盖（两个方向都通）");
-ok(wrApply.indexOf("this.saveState") >= 0, "C22：状态行给一句人话（「文件宽度 → 跟随看板 / N px」）");
+/* R27：回执改走 note()（专门通道）—— 只写 saveState 会被 persist() 覆写成
+   「已写入 .base」，等于没回执。意图不变：拨完必须留一句人话。 */
+ok(wrApply.indexOf("this.note(") >= 0, "C22：状态行给一句人话（「文件宽度 → 跟随看板 / N px」）");
 ok(/fk\.addEventListener\("click", \(evt\) => \{[\s\S]{0,120}?preventDefault\(\);[\s\S]{0,120}?stopPropagation\(\);/.test(wrApply),
   "C23：打勾项自己挡住冒泡（它是菜单项，但别让外层 closer 提前把窗收走）");
 ok(wr.indexOf("paint();") >= 0, "C24：建好就 paint 一次（初值不会显示错）");
