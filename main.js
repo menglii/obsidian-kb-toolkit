@@ -163,6 +163,10 @@ const K_SORT = "排序";          // 板块级：卡片排序方式（空 = 沿�
 const K_FOLD = "折叠";          // 对象：{"板块名":true,"板块名/子板块名":true}；只存「收起」的，省体积
 const K_EXCLUDE = "排除目录";    // 字符串（逗号分隔）——按**目录段**匹配，所以写 99_Meta 就够
 const K_CAP = "总条数上限";      // number；0 = 不限
+/* R28（老板报障）：兜底「全部」板块的条数上限。板块被删空时那个「全部」原本无上限，
+   344 篇一次性建 DOM（还带内嵌 base）→ 整库卡死。默认跟普通板块一致（50），
+   要全看在板块标题旁点「显示全部（慎用）」。0 = 不限。 */
+const K_ALL = "全部板块上限";
 /* R24（boss 第 3 条·文件操作）：把某篇笔记「收起来」的三件套 —— 都是**视图级**的。
  * 为什么不做成板块级：一篇笔记属于哪个板块会随数据源变，隐藏状态得跟着**笔记**走，
  * 挂在某个板块上会「一改数据源就漏出来」。所以这三项在右键菜单里被归到
@@ -182,6 +186,13 @@ const DEBOUNCE_MS = 1500;       // 静默多久才落盘（双同步库：坚果
 const CLICK_DELAY_MS = 250;     // 单击标题 = 改名 → 双击判定要等这么久
 const REVEAL_DELAY_MS = 300;    // 「＋」建完后，多久轮询一次真卡片
 const REVEAL_TRIES = 10;        // 最多轮询几次（≈3 秒）
+/* R28：兜底「全部」板块默认上限（老板拍板：默认 50 + 显示全部，跟普通板块一致） */
+const DEFAULT_ALL_CAP = 50;
+/* R28：正文同时最多几篇在渲染。每篇正文里可能嵌 ```base → MarkdownRenderer
+   要现起一个 Bases 引擎（全库查询 + 建 DOM，单个几十毫秒级）→ 并发要压住 */
+const BODY_CONCURRENCY = 2;
+/* R28：每批之间让出一帧 —— 治的是「主线程被连成一片」导致的不响应 */
+const BODY_YIELD_MS = 16;
 
 /* 板块级 `排序` 的取值；认不出的值一律当「默认」（不报错、不改用户数据） */
 const SORT_LABEL = {
@@ -211,6 +222,7 @@ const DEFAULT_SETTINGS = {
   newNoteName: "未命名",                        // 「＋」的默认文件名（撞名自动加序号）
   excludeFolders: "99_Meta",                   // 性能护栏：按目录段排除
   totalCap: 0,                                 // 性能护栏：0 = 不限
+  allCap: 50,                                  // R28 性能护栏：兜底「全部」板块上限（0 = 不限）
 };
 let PLUGIN_SETTINGS = Object.assign({}, DEFAULT_SETTINGS);
 
@@ -710,6 +722,8 @@ class CreationBoardView extends BasesViewBase {
     this.bodyItems = [];            // 正文懒加载项
     this.bodyQueue = [];
     this.bodyPumping = false;
+    this.bodyConcurrency = BODY_CONCURRENCY;   // R28：可被测试覆盖
+    this.bodyYieldMs = BODY_YIELD_MS;          // R28：可被测试覆盖（0 = 不让帧）
     this.pending = new Map();       // path → { file, props:{}, timer }
     this.writeCount = 0;            // 真正落盘次数（断言用）
     this.lastWrite = null;          // 最近一次写入的 { path, props }（断言用）
@@ -727,6 +741,7 @@ class CreationBoardView extends BasesViewBase {
     /* —— 第 4 轮状态 —— */
     this.excludedCount = 0;         // 被「排除目录」挡掉几条（护栏要可见，不静默）
     this.cappedCount = 0;           // 被「总条数上限」砍掉几条
+    this.allCappedCount = 0;        // R28：兜底「全部」板块被自己的上限砍掉几条
     this.conflicts = new Set();     // 编辑期间被外部改过的 path
     this.lastConflict = null;       // 最近一次冲突（断言用）
     this.lastCreate = null;         // 最近一次「＋」新建（断言用）
@@ -1118,6 +1133,7 @@ class CreationBoardView extends BasesViewBase {
       String(this.optBool(K_RO, false)),
       String(this.cfgGet(K_EXCLUDE, "~")),
       String(this.cfgGet(K_CAP, "~")),
+      String(this.cfgGet(K_ALL, "~")),   /* R28：拨「显示全部 / 恢复上限」要即时重画 */
       String(this.optBool(K_HIDE_EMPTY, false)),    /* R27：拨「隐藏空板块」要即时重绘（影响哪些块出现） */
       String(this.cfgGet(K_GAP, "~")),              /* R27：拨「网格间距」同理 */
       String(this.cfgGet(K_CARD_H, "~")),           /* R27：拨「卡片默认高度」同理 */
@@ -1219,6 +1235,11 @@ class CreationBoardView extends BasesViewBase {
   totalCap() {
     return Math.max(0, Math.floor(this.optNum(K_CAP, PLUGIN_SETTINGS.totalCap)));
   }
+  /** R28：兜底「全部」板块的条数上限（视图级优先，没写过 → 插件默认；0 = 不限） */
+  allCap() {
+    const dflt = Math.max(0, Math.floor(num(PLUGIN_SETTINGS.allCap, DEFAULT_ALL_CAP)));
+    return Math.max(0, Math.floor(this.optNum(K_ALL, dflt)));
+  }
   /** 交给分组引擎的条目池：先按「排除目录」过滤 → 再按「总条数上限」截断
    *  两个数都记下来给工具条显示（**不做静默截断**，看不到就说明它被挡在哪了） */
   visibleEntries() {
@@ -1250,6 +1271,7 @@ class CreationBoardView extends BasesViewBase {
    * ============================================================ */
   buildSections() {
     const all = this.visibleEntries();
+    this.allCappedCount = 0;   // R28：只有兜底分支会写它（下面每个 return 之前都重置）
     const allowDup = this.optBool(K_DUP, true);
     const showCatch = this.optBool(K_CATCH, this.pluginCatchDefault());
 
@@ -1262,7 +1284,20 @@ class CreationBoardView extends BasesViewBase {
       }
       this.mode = "未配置板块 · 显示全部";
       this.catchPreview = null;
-      return [{ id: "all", srcIndex: -1, name: "全部", source: "all", entries: all, children: [], total: all.length }];
+      /* R28（老板报障）：兜底也要有上限 —— 原来这里是 `all` 原样丢进去，
+         板块被删空 → 344 篇一起建 DOM（带内嵌 base 的卡还各起一个引擎）→ 整库卡死。
+         这里只截 `entries`，`total` 仍报真实总数 —— 标题栏写「显示 / 总数」，
+         工具条写「超上限截断 N 篇」，旁边给「显示全部」按钮。不静默截断。 */
+      const lim = this.allCap();
+      let shown = all;
+      if (lim > 0 && all.length > lim) {
+        this.allCappedCount = all.length - lim;
+        shown = all.slice(0, lim);
+      }
+      return [{
+        id: "all", srcIndex: -1, name: "全部", source: "all",
+        entries: shown, children: [], total: all.length, shownCount: shown.length,
+      }];
     }
 
     this.mode = "板块配置 " + this.secs.length + " 个";
@@ -1689,7 +1724,41 @@ class CreationBoardView extends BasesViewBase {
         this.beginRenameSection(sec, nameEl);
       });
     }
-    head.createSpan({ cls: "cb-section-count", text: sec.total + " 条" });
+    /* R28：兜底「全部」被上限截断时，条数写「显示 / 总数」——别让人数着 50 张卡
+       看标题写 344 条，以为看板坏了。 */
+    const cntTxt = (sec.source === "all" && typeof sec.shownCount === "number"
+      && sec.shownCount !== sec.total)
+      ? sec.shownCount + " / " + sec.total + " 条"
+      : sec.total + " 条";
+    head.createSpan({ cls: "cb-section-count", text: cntTxt });
+    /* R28（老板报障）：兜底「全部」板块的**显式**上限开关 —— 默认只渲 allCap() 条，
+       要全看在旁边点一下。为什么不做成「硬扛全部」：346 篇一起建 DOM 就是卡死的现场；
+       为什么不做成「静默截断」：那等于把笔记藏起来。所以给一个看得见、点得到的门。 */
+    if (sec.source === "all" && !this.readonly()) {
+      const capNow = this.allCap();
+      const ab = head.createEl("button", { cls: "cb-sec-allbtn" });
+      if (capNow > 0) {
+        ab.setText("显示全部 " + sec.total + " 篇（慎用）");
+        ab.setAttr("title", "现在只渲前 " + capNow + " 篇。点一下放开上限、一次性渲染全部；"
+          + "笔记很多（尤其正文里带内嵌 base）时会卡一下 —— 看完建议点回来。");
+      } else {
+        ab.setText("恢复上限 " + DEFAULT_ALL_CAP + " 篇");
+        ab.setAttr("title", "当前不限条数。点一下恢复默认上限 " + DEFAULT_ALL_CAP + " 篇。");
+      }
+      ab.addEventListener("click", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        if (capNow > 0) {
+          this.cfgSet(K_ALL, 0);
+          this.saveState = "全部板块 → 不限条数（慎用）";
+        } else {
+          this.cfgSet(K_ALL, null);   // 删键 → 回到插件默认
+          this.saveState = "全部板块 → 上限 " + DEFAULT_ALL_CAP + " 篇";
+        }
+        this.sig = null;              // 铁律 56：这是「换台面」的键，签名必须失效
+        this.repaint(true);
+      });
+    }
     if (sec.isCatch) head.createSpan({ cls: "cb-badge", text: "收容所" });
     else if (sec.native) head.createSpan({ cls: "cb-badge", text: "自动" });
     else if (sec.isFormulaValue) head.createSpan({ cls: "cb-badge", text: "公式" });
@@ -3291,21 +3360,59 @@ class CreationBoardView extends BasesViewBase {
     this.pumpBody();
   }
 
+  /** R28（老板报障「各类操作都变得很卡甚至不响应」）：正文**限并发 + 逐批让帧**。
+   *
+   *  原来这里是一口气 while 到底（顺序 await，但中间不给主线程任何空档）：滚动时
+   *  几十张卡在同一帧里被观察者入队，队列连续跑完不停歇；而每篇正文里可能嵌 ```base
+   *  → MarkdownRenderer 要**现起一个 Bases 引擎**（全库查询 + 建 DOM，单个几十毫秒级）
+   *  → 主线程被连成一片，界面不响应。
+   *  现在：每批最多 bodyConcurrency 篇并发，批与批之间让出 bodyYieldMs 一帧。
+   *  治的是「卡住不响应」，不是吞吐 —— 摊成能喘气，别冻成一块。
+   */
   async pumpBody() {
     if (this.bodyPumping) return;
     this.bodyPumping = true;
+    const conc = Math.max(1, Math.floor(this.bodyConcurrency) || 1);
     try {
       while (this.bodyQueue.length) {
-        const item = this.bodyQueue.shift();
-        if (!item || item.state !== "queued") continue;
-        item.state = "rendering";
-        await this.loadBody(item);
-        item.state = "done";
+        const batch = [];
+        while (batch.length < conc && this.bodyQueue.length) {
+          const item = this.bodyQueue.shift();
+          if (!item || item.state !== "queued") continue;
+          item.state = "rendering";
+          batch.push(item);
+        }
+        if (!batch.length) continue;
+        await Promise.all(batch.map((it) => this.runBodyJob(it)));
         this.updateBar();
+        if (this.bodyQueue.length) await this.bodyYield();
       }
     } finally {
       this.bodyPumping = false;
     }
+  }
+
+  /** 单篇正文渲染 —— 出错也得把状态推到 done，否则队列会永远卡在这一篇（原来没这层） */
+  async runBodyJob(item) {
+    try {
+      await this.loadBody(item);
+    } catch (e) {
+      try {
+        item.bodyEl.empty();
+        item.bodyEl.createDiv({
+          cls: "cb-body-error",
+          text: "正文渲染失败：" + (e && e.message ? e.message : String(e)),
+        });
+      } catch (e2) {}
+    }
+    item.state = "done";
+  }
+
+  /** 让出一帧（用 setTimeout 不用 rAF：jsdom 里没有 rAF，后台标签页也不出帧） */
+  bodyYield() {
+    const ms = Math.max(0, Math.floor(this.bodyYieldMs) || 0);
+    if (!ms) return Promise.resolve();
+    return new Promise((r) => setTimeout(r, ms));
   }
 
   async loadBody(item) {
@@ -4004,6 +4111,7 @@ class CreationBoardView extends BasesViewBase {
     /* 护栏可见化：不静默截断，被挡掉多少篇直接写出来 */
     if (this.excludedCount) txt += " · 排除目录挡掉 " + this.excludedCount + " 篇";
     if (this.cappedCount) txt += " · 超总上限截断 " + this.cappedCount + " 篇";
+    if (this.allCappedCount) txt += " · 全部板块超上限截断 " + this.allCappedCount + " 篇";
     if (this.bodyItems.length) {
       const done = this.bodyItems.filter((i) => i.state === "done").length;
       txt += " · 正文 " + done + "/" + this.bodyItems.length;
@@ -4247,6 +4355,8 @@ class CreationBoardView extends BasesViewBase {
     view[K_PROS_OPEN] = this.optBool(K_PROS_OPEN, true);   /* R15 修：原来配置搬运会丢这一项 */
     view[K_EXCLUDE] = this.cfgGet(K_EXCLUDE, "");
     view[K_CAP] = this.optNum(K_CAP, 0);
+    /* R28：跟 gap / cardH 同一套纪律 —— 没拨过就别把默认值固化进 .base */
+    if (this.cfgGet(K_ALL, undefined) !== undefined) view[K_ALL] = this.optNum(K_ALL, DEFAULT_ALL_CAP);
     view[K_HIDDEN_ON] = this.optBool(K_HIDDEN_ON, true);
     view[K_HIDDEN_SHOW] = this.optBool(K_HIDDEN_SHOW, false);
     view[K_HIDDEN] = this.hiddenPaths();
@@ -4370,6 +4480,7 @@ class CreationBoardView extends BasesViewBase {
       kinds[K_WIDTH] = "num"; kinds[K_DUP] = "bool"; kinds[K_CATCH] = "bool"; kinds[K_PROPS] = "raw";
       kinds[K_BODY] = "bool"; kinds[K_CHARS] = "num"; kinds[K_RO] = "bool";
       kinds[K_EXCLUDE] = "raw"; kinds[K_CAP] = "num"; kinds[K_FILL] = "bool"; kinds[K_PROS_OPEN] = "bool";
+      kinds[K_ALL] = "num";   // R28：跟导出对称，少了这行搬进来的配置会被静默丢掉
       kinds[K_HIDDEN_ON] = "bool"; kinds[K_HIDDEN_SHOW] = "bool"; kinds[K_HIDDEN] = "raw";
       /* R27：跟导出对称 —— 少了这三行，搬进来的配置会被静默丢掉 */
       kinds[K_GAP] = "num"; kinds[K_CARD_H] = "num"; kinds[K_HIDE_EMPTY] = "bool";
@@ -5404,6 +5515,7 @@ class CreationBoardSettingTab extends PluginSettingTabBase {
     field("「＋」默认文件名", "不带 .md；撞名自动加序号（未命名 → 未命名 2）。", "text", "newNoteName");
     field("性能护栏 · 排除目录", "逗号分隔，按**目录段**匹配 —— 写 99_Meta 就能命中 01_新知识库/99_Meta/…。", "text", "excludeFolders");
     field("性能护栏 · 总条数上限", "0 = 不限。超了会在工具条上如实写「超总上限截断 N 篇」，不静默。", "int", "totalCap");
+    field("性能护栏 · 全部板块上限", "板块被删空时的兜底「全部」板块默认只渲这么多（0 = 不限）。超了工具条如实写「全部板块超上限截断 N 篇」；板块标题旁另有「显示全部（慎用）」按钮。", "int", "allCap");
   }
 }
 
@@ -5449,6 +5561,8 @@ class CreationBoardPlugin extends Plugin {
     PLUGIN_SETTINGS = Object.assign({}, DEFAULT_SETTINGS, d && typeof d === "object" && !Array.isArray(d) ? d : {});
     const n = Math.floor(num(PLUGIN_SETTINGS.totalCap, 0));
     PLUGIN_SETTINGS.totalCap = isFinite(n) && n > 0 ? n : 0;
+    const na = Math.floor(num(PLUGIN_SETTINGS.allCap, DEFAULT_ALL_CAP));
+    PLUGIN_SETTINGS.allCap = isFinite(na) && na > 0 ? na : 0;
     PLUGIN_SETTINGS.catchAllDefault = !!PLUGIN_SETTINGS.catchAllDefault;
     if (typeof PLUGIN_SETTINGS.newNoteFolder !== "string") PLUGIN_SETTINGS.newNoteFolder = DEFAULT_SETTINGS.newNoteFolder;
     if (typeof PLUGIN_SETTINGS.newNoteName !== "string" || !PLUGIN_SETTINGS.newNoteName.trim())

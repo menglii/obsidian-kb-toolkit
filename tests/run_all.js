@@ -19,12 +19,14 @@
  *         （就地刷新 + 顶上一条回执，回执走 note() 专用通道，否则被 persist() 覆写）/
  *         刷新下面加「收起 · 展开本板块」/ 全体板块面板填空（摘要条 + 「内容」组 +
  *         网格间距 + 卡片默认高度 + 一键全收 + 「已自定义」徽标），
+ *  R28 = 兜底「全部」板块默认上限 50 + 「显示全部（慎用）」按钮 / 正文渲染限并发
+ *         （老板报障：删空板块后兜底「全部」把整库拖垮 → 344 篇一起建 DOM），
  * 聚合两代输出格式（PASS/FAIL 与 通过/失败）。 */
 const { execFileSync } = require("child_process");
 const path = require("path");
 const NODE = process.execPath;
 const FILES = ["run_r1", "run_r2", "run_r3", "run_r3b", "run_r4", "run_r4b", "run_r5",
-  "run_r6", "run_r7", "run_r8", "run_r9", "run_r10", "run_r11", "run_r12", "run_r13", "run_r14", "run_r15", "run_r16", "run_r17", "run_r18", "run_r19", "run_r20", "run_r20b", "run_r21", "run_r22", "run_r23", "run_r24", "run_r25", "run_r26", "run_r27"];
+  "run_r6", "run_r7", "run_r8", "run_r9", "run_r10", "run_r11", "run_r12", "run_r13", "run_r14", "run_r15", "run_r16", "run_r17", "run_r18", "run_r19", "run_r20", "run_r20b", "run_r21", "run_r22", "run_r23", "run_r24", "run_r25", "run_r26", "run_r27", "run_r28"];
 
 const rounds = parseInt(process.argv[2] || "3", 10);
 let grandTotal = 0, grandFail = 0;
@@ -47,7 +49,16 @@ for (let round = 1; round <= rounds; round++) {
     }
     const p = parseInt(pm[1], 10), fl = parseInt(fn[1], 10);
     total += p; failed += fl;
-    if (fl > 0) console.log("ROUND" + round + " " + f + ": PASS " + p + " / FAIL " + fl + "\n" + out.split("\n").filter(l => l.indexOf("FAIL ") === 0 || l.indexOf("  - ") === 0).join("\n"));
+    if (fl > 0) {
+      const detail = out.split("\n").filter(l => l.indexOf("FAIL ") === 0 || l.indexOf("  - ") === 0).join("\n");
+      console.log("ROUND" + round + " " + f + ": PASS " + p + " / FAIL " + fl + "\n" + detail);
+      /* R28 排障：解析规则是「(数字) 通过」优先、退回「PASS (数字)」——
+         一旦这个套件的输出里混进了**别处的**「N 通过 / M 失败」，上面那行就是别人的数字，
+         而 detail 会空着（因为不是「FAIL 」开头的行）。失败时把原始 out 尾部打出来，
+         让这种误匹配当场可见，不再靠猜。 */
+      console.log("  --- 原始输出尾部（诊断用）---\n  "
+        + JSON.stringify(out.slice(-700)).replace(/\\n/g, "\\n  "));
+    }
   }
   grandTotal += total; grandFail += failed;
   console.log("ROUND" + round + " 总计: " + total + " 通过 / " + failed + " 失败");

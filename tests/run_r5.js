@@ -340,7 +340,14 @@ function readSrc() {
     eq(onDisk.length, fileEntries.length, "J：磁盘示例库文件数 = zip 文件条目数（README 也在库内）");
     eq(sMan.root, D.paths.knowledgeBase, "J：示例库结构与默认配置同构（无需改路径）");
   } catch (e) {
-    ok(false, "J：生成器复跑失败 → " + (e && e.message));
+    /* 🔴 环境敏感（R28 排障查实）：生成器第一件事就是 `fs.rmSync(示例库目录)`。
+       在受限 shell / 沙箱里这一步会被拦（WorkBuddy 的 node-safe-delete-shim 拦 fs.rmSync
+       → 抛 Error，栈顶是 wrappedRmSync），于是**下面 try 里那 5 条断言一条都不跑** →
+       汇总会显示「PASS 103 / FAIL 1」而不是「PASS 108 / FAIL 0」。
+       ⚠️ 这是**环境**不能执行删除，不是样例库漂移 —— 别据此怀疑代码。
+       跑全量回归要用不受限的 shell；这里仍如实记一条失败，不静默吞掉。 */
+    ok(false, "J：生成器复跑失败（被沙箱拦了 rmSync？见 scripts/make_sample_vault.js:45）→ "
+      + (e && e.message));
   }
 
   await plugin.onunload(); await p2.onunload(); await p3.onunload();

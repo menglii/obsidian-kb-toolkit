@@ -217,10 +217,10 @@
 NODE="<node>"; export NODE_PATH="<node_modules>"
 cd .obsidian/plugins/kb-toolkit
 "$NODE" scripts/build.js          # → main.js + styles.css
-"$NODE" tests/run_all.js 3        # 全套 30 个套件 × 3 轮
+"$NODE" tests/run_all.js 3        # 全套 31 个套件 × 3 轮
 ```
 
-测试跑的是**构建产物** `main.js`，改过 `src/` 必须先 build。全套断言用 stub obsidian（覆 `Module._load`）+ jsdom，**全离线**，期望值从真实文件/配置动态推算。当前 **2226 断言 / 每轮 0 失败**（`run_all.js 3` → 6678）。其中 `run_r27.js`（125 条）是 R27 右键菜单不关窗 + 描边闪 + 全体面板填空的专属套件，`run_r26.js`（85 条）是 R26 等高留白 / 板块级卡片高度 / 勾选框直点 / 长按菜单 / 单击改名的专属套件，`run_r25.js`（122 条）是 R25 板块级文件宽度 + 右键菜单三件套的专属套件，`run_r20b.js`（298 条）是**看板真 DOM 冒烟** —— 源码级正则抓不到「改完当场抛异常」，它把内嵌看板真造出来、真点面板与编辑行。
+测试跑的是**构建产物** `main.js`，改过 `src/` 必须先 build。全套断言用 stub obsidian（覆 `Module._load`）+ jsdom，**全离线**，期望值从真实文件/配置动态推算。当前 **2337 断言 / 每轮 0 失败**（`run_all.js 3` → 7011）。其中 `run_r28.js`（69 条）是 R28 兜底「全部」板块默认上限 50 + 「显示全部（慎用）」按钮 + 正文限并发的专属套件，`run_r27.js`（125 条）是 R27 右键菜单不关窗 + 描边闪 + 全体面板填空的专属套件，`run_r26.js`（85 条）是 R26 等高留白 / 板块级卡片高度 / 勾选框直点 / 长按菜单 / 单击改名的专属套件，`run_r25.js`（122 条）是 R25 板块级文件宽度 + 右键菜单三件套的专属套件，`run_r20b.js`（340 条）是**看板真 DOM 冒烟** —— 源码级正则抓不到「改完当场抛异常」，它把内嵌看板真造出来、真点面板与编辑行。
 
 重建的执行/回滚还必须过**真文件沙盒**（真 fs 的 `renameSync`/`rmSync`），以及把真库整棵拷进工作区再演一遍：
 
@@ -264,7 +264,7 @@ kb-toolkit/
 ├── styles_src/              # 样式权威源
 ├── scripts/                 # build.js + 审计脚本
 ├── samples/                 # 示例库 zip
-└── tests/                   # run_r1~r25（28 套件）+ stub_obsidian.js + run_all.js
+└── tests/                   # run_r1~r28（31 套件）+ stub_obsidian.js + run_all.js
 ```
 
 ## FAQ

@@ -4,7 +4,9 @@
  *   这里把视图真造出来，把顶栏齿轮 / 板块设置面板 / 板块编辑行真渲染一遍并点击。
  * R21 追加：「卡片」组那一行「文件宽度 [拉杆] ＋ 自动 [开关]」也真渲染真点
  *   （拨开关 / 推拉杆 → 验 config 写回 + 面板不崩 + 拉杆置灰解除）。
- * 只读：不写任何笔记、不落盘。 */
+ * R28 追加：兜底「全部」板块默认上限 50 + 「显示全部（慎用）」按钮 + 正文渲染限并发
+   —— 造 120 篇 + 清空板块配置，量「真只建 50 张卡」「按钮真写 .base」「并发峰值 ≤ 2」。
+ * 只读：不写任何笔记、不落盘（config.set 落在桩的 SAVES 里，不碰真库）。 */
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -983,8 +985,141 @@ function makeConfig(obj) {
   v.sig = null;
   v.onDataUpdated();
   eq(v.listEl.querySelectorAll(".cb-section").length, shownBefore27, "（收拾现场）开关关掉 → 板块数复原");
-  if (v.panelOpen) v.closePanel();
-  v.repaint(false);
+  /* ================= R28：兜底「全部」加限 + 显示全部 + 正文限并发 ================= */
+  head("R28 · 兜底「全部」：默认上限 50 + 显示全部 + 限并发");
+
+  /* —— ① 造 120 篇 + 清空板块配置 → 正是老板的现场（板块被删空）—— */
+  const many = [];
+  for (let i = 1; i <= 120; i++) {
+    const p = "01_新知识库/大量" + i + ".md";
+    many.push({
+      file: {
+        path: p, name: "大量" + i + ".md", basename: "大量" + i,
+        extension: "md", parent: { path: "01_新知识库" }, stat: { mtime: i, size: 10 },
+      },
+      frontmatter: {}, getValue() { return null; },
+    });
+  }
+  v.data = { data: many, groupedData: [] };
+  v.cfgSet("板块", null);            // ← 老板的现场：板块被删空 → 走兜底分支
+  v.sig = null;
+  v.repaint(true);
+  eq(v.secs.length, 0, "板块配置清空");
+  eq(v.sections.length, 1, "兜底只出一个「全部」块");
+  eq(v.allCap(), 50, "兜底默认上限 = 50（插件级默认，老板拍板的值）");
+  const allSec = v.sections[0];
+  eq(allSec.source, "all", "兜底块 source = all（按钮的判据）");
+  eq(allSec.total, 120, "total 报**真实总数** 120（不虚报）");
+  eq(allSec.shownCount, 50, "shownCount = 50（上限真生效）");
+  eq(v.allCappedCount, 70, "截断数如实记账 = 70");
+  eq(allSec.entries.length, 50, "交给渲染的 entries 只有 50 条 —— 这就是不卡的原因");
+  eq(v.listEl.querySelectorAll(".cb-card").length, 50, "看板上**真只建了 50 张卡**");
+  ok(/全部板块超上限截断 70 篇/.test(v.countEl.textContent),
+    "工具条如实写「全部板块超上限截断 70 篇」（不静默截断）");
+  eq(v.listEl.querySelector(".cb-section-count").textContent, "50 / 120 条",
+    "标题条数写「50 / 120 条」（显示数 / 总数）");
+  const allBtn = v.listEl.querySelector(".cb-sec-allbtn");
+  ok(!!allBtn, "兜底块标题旁真有「显示全部」按钮");
+  eq(allBtn.textContent, "显示全部 120 篇（慎用）", "按钮文案带真实总数");
+
+  /* —— ② 点「显示全部」→ 真写 .base + 真放开 —— */
+  const savesBefore = SAVES.length;
+  click(allBtn);
+  const wrote = SAVES.slice(savesBefore).filter((s) => s.key === "全部板块上限");
+  eq(wrote.length, 1, "点一下只写一次「全部板块上限」");
+  eq(wrote[0].val, 0, "写的是 0 = 不限（不是硬写某个数）");
+  eq(v.allCap(), 0, "读回来也是不限");
+  eq(v.listEl.querySelectorAll(".cb-card").length, 120, "放开后 120 张卡全在");
+  eq(v.listEl.querySelector(".cb-section-count").textContent, "120 条", "标题回到「120 条」（不再写 N / M）");
+  eq(v.listEl.querySelector(".cb-sec-allbtn").textContent, "恢复上限 50 篇",
+    "按钮变成「恢复上限 50 篇」—— 是**可逆**的门，不是单向开关");
+
+  /* —— ③ 点「恢复上限」→ 删键，回插件默认 —— */
+  click(v.listEl.querySelector(".cb-sec-allbtn"));
+  eq(SAVES[SAVES.length - 1].key, "全部板块上限", "再点写的是同一个键");
+  eq(SAVES[SAVES.length - 1].val, null, "写 null = 删键（回插件默认，不是硬写 50）");
+  eq(v.allCap(), 50, "删键后读到插件默认 50");
+  eq(v.listEl.querySelectorAll(".cb-card").length, 50, "卡数回到 50");
+
+  /* —— ④ 上限可调（不是硬编码 50）—— */
+  v.cfgSet("全部板块上限", 10);
+  v.sig = null;
+  v.repaint(true);
+  eq(v.listEl.querySelectorAll(".cb-card").length, 10, "把上限拨到 10 → 只渲 10 张");
+  eq(v.allCappedCount, 110, "截断数跟着变 = 110");
+  eq(v.listEl.querySelector(".cb-sec-allbtn").textContent, "显示全部 120 篇（慎用）",
+    "按钮文案仍是真实总数（不跟着上限走）");
+  v.cfgSet("全部板块上限", null);
+  v.sig = null;
+  v.repaint(true);
+
+  /* —— ⑤ 配了板块 → 兜底块不存在，按钮不该冒出来（回归护栏）—— */
+  v.cfgSet("板块", [{ "名称": "收件箱", "数据源": "folder", "路径": "01_新知识库", "递归深度": 1, "上限": 30 }]);
+  v.sig = null;
+  v.repaint(true);
+  eq(v.sections.length, 1, "配了板块 → 走正常路径");
+  eq(v.listEl.querySelectorAll(".cb-sec-allbtn").length, 0, "不是兜底块 → **没有**「显示全部」按钮");
+  eq(v.allCappedCount, 0, "非兜底路径 allCappedCount 归 0（不吃上一轮残留）");
+  eq(v.listEl.querySelectorAll(".cb-card").length, 30, "普通板块的「上限 30」照旧（没被 R28 碰坏）");
+
+  /* —— ⑥ 只读模式不给按钮（它要写配置）—— */
+  v.cfgSet("板块", null);
+  v.cfgSet("只读", true);
+  v.sig = null;
+  v.repaint(true);
+  eq(v.listEl.querySelectorAll(".cb-sec-allbtn").length, 0, "只读模式不给「显示全部」按钮");
+  v.cfgSet("只读", null);
+  v.sig = null;
+  v.repaint(true);
+
+  /* —— ⑦ 正文限并发：真跑 pumpBody，量「同时在飞」的峰值 —— */
+  v.bodyConcurrency = 2;
+  v.bodyYieldMs = 0;                 // 金标：延时是实例字段 → 测试不让帧
+  let inflight = 0, peak = 0;
+  const doneOrder = [];
+  v.loadBody = async function (item) {
+    inflight++;
+    peak = Math.max(peak, inflight);
+    await new Promise((r) => setTimeout(r, 4));
+    inflight--;
+    doneOrder.push(item.tag);
+  };
+  const mkBodyItem = (tag) => ({
+    tag, file: { path: "x/" + tag + ".md" }, bodyEl: document.createElement("div"),
+    chars: 0, state: "queued", card: null, showYaml: false, showLinks: true,
+  });
+  v.bodyItems = [];
+  for (let i = 1; i <= 7; i++) { const it = mkBodyItem(i); v.bodyItems.push(it); v.bodyQueue.push(it); }
+  await v.pumpBody();
+  eq(peak, 2, "同时在飞的正文渲染峰值 = 2（并发被压住）");
+  eq(doneOrder.length, 7, "7 篇全部渲染完（让帧 ≠ 丢活）");
+  eq(v.bodyQueue.length, 0, "队列跑空");
+  eq(v.bodyItems.filter((i) => i.state === "done").length, 7, "7 篇状态都推进到 done");
+  ok(/正文 7\/7/.test(v.countEl.textContent), "工具条「正文 7/7」（进度是真算出来的）");
+
+  /* —— ⑧ 并发可调：调到 1 → 峰值只能是 1 —— */
+  inflight = 0; peak = 0; doneOrder.length = 0;
+  v.bodyConcurrency = 1;
+  v.bodyItems = [];
+  for (let i = 1; i <= 4; i++) { const it = mkBodyItem(i); v.bodyItems.push(it); v.bodyQueue.push(it); }
+  await v.pumpBody();
+  eq(peak, 1, "并发调到 1 → 峰值 1（可调，不是硬编码）");
+  eq(doneOrder.length, 4, "4 篇照样全跑完");
+
+  /* —— ⑨ 单篇抛异常不能卡住队列（原来那一篇永远停在 rendering → 后面全堵）—— */
+  v.bodyConcurrency = 2;
+  v.bodyItems = [];
+  doneOrder.length = 0;
+  v.loadBody = async function (item) {
+    if (item.tag === 2) throw new Error("这一篇炸了");
+    doneOrder.push(item.tag);
+  };
+  for (const it of [mkBodyItem(1), mkBodyItem(2), mkBodyItem(3)]) { v.bodyItems.push(it); v.bodyQueue.push(it); }
+  await v.pumpBody();
+  eq(v.bodyItems.filter((i) => i.state === "done").length, 3, "炸了一篇 → 三篇都到 done（不卡在 rendering）");
+  eq(v.bodyQueue.length, 0, "队列照旧跑空");
+  eq(doneOrder.length, 2, "另外两篇真的渲了（不是被一起吞掉）");
+  ok(/正文 3\/3/.test(v.countEl.textContent), "工具条「正文 3/3」（计数不会永远差一个）");
 
   console.log("\nR20-看板DOM冒烟: PASS " + pass + " / FAIL " + fail
     + (fail ? "\n" + fails.join("\n") : ""));
