@@ -258,7 +258,8 @@ function makeConfig(obj) {
   ok(!!nameEl, "板块标题里有 .cb-section-name（改名入口）");
   eq(nameEl && nameEl.textContent, "收件箱", "标题写着板块名");
   ok(nameEl && nameEl.hasClass("cb-sec-name-edit"), "可配置的板块 → 名字带「可编辑」标记（hover 有手感）");
-  ok((nameEl.getAttribute("title") || "").indexOf("双击改名") >= 0, "title 说明「双击改名 + 拖动排序」");
+  ok((nameEl.getAttribute("title") || "").indexOf("点一下改名") >= 0,
+    "title 说明「点一下改名 + 拖动排序」（R26 从双击改成单击，dblclick 仍保留）");
 
   /* 双击 → 就地换输入框；Enter 提交 → 改内存 + 写回 .base「板块」段 */
   fire(nameEl, "dblclick");
@@ -428,7 +429,7 @@ function makeConfig(obj) {
   const catchHead = [...v.listEl.querySelectorAll(".cb-section")][1].querySelector(".cb-section-head");
   const catchName = catchHead.querySelector(".cb-section-name");
   ok(!!catchName && catchName.hasClass("cb-sec-name-edit"),
-    "收容所是配置给的板块 → 同样可双击改名（跟自动分组 / 公式组区分开）");
+    "收容所是配置给的板块 → 同样可点一下改名（跟自动分组 / 公式组区分开）");
   eq(v.listEl.querySelectorAll("button.cb-sec-gear").length, 0, "收容所板块旁也没有齿轮（全都撤了）");
   catchHead.dispatchEvent(new W.MouseEvent("contextmenu",
     { bubbles: true, cancelable: true, clientX: 70, clientY: 210 }));
@@ -681,6 +682,119 @@ function makeConfig(obj) {
   v.closePanel();
   v.repaint(false);
   eq(v.secs.length, n0, "（收拾现场）新板块删掉了");
+
+  /* ---------- ④b R26：单击改名 / 菜单「卡片高度」行 / 任务勾选直接点 / 长按 ---------- */
+  head("R26 · 单击改名 / 卡片高度行 / 任务勾选 / 长按");
+  const sleep26 = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /* ① 单击板块名 → 就地换输入框（R26 从双击放宽到单击；dblclick 仍保留） */
+  secHead = v.listEl.querySelector(".cb-section .cb-section-head");
+  nameEl = secHead && secHead.querySelector(".cb-section-name");
+  fire(nameEl, "click");
+  const rin26 = secHead.querySelector("input.cb-sec-rename-input");
+  ok(!!rin26, "单击板块名 → 就地换输入框（不用再双击）");
+  key(rin26, "Escape");
+  eq(nameEl.textContent, "收件箱", "（收拾现场）Esc 放弃改名");
+
+  /* ② 右键菜单：宽 / 高两行并存 + 两个打勾项 */
+  menu = openSecMenu(0);
+  const wrows26 = menu.querySelectorAll(".cb-ctx-wrow");
+  eq(wrows26.length, 2, "菜单里宽 / 高两行并存（文件宽度 + 卡片高度）");
+  const hrow26 = wrows26[1];
+  const hlb26 = hrow26.querySelector(".cb-wlb");
+  const hrg26 = hrow26.querySelector("input.cb-wrange");
+  ok(!!hlb26 && hlb26.textContent === "卡片高度", "第二行标签 = 卡片高度");
+  ok(!!hrg26 && hrg26.getAttribute("min") === "120" && hrg26.getAttribute("max") === "480"
+     && hrg26.getAttribute("step") === "10", "高度拉杆 120–480 / step 10");
+  eq(menu.querySelectorAll(".cb-ctx-item.cb-ctx-follow").length, 2,
+    "两个打勾项：跟随看板（宽）+ 跟随内容（高）");
+  const followH26 = menu.querySelectorAll(".cb-ctx-item.cb-ctx-follow")[1];
+  ok(followH26.getAttribute("data-key") === "跟随内容", "第二个打勾项 data-key = 跟随内容");
+  ok(followH26.textContent.indexOf("跟随内容") >= 0, "文案 = 跟随内容");
+  /* 取消「跟随内容」→ secH 落盘（拉杆默认显示 260） */
+  followH26.dispatchEvent(new W.MouseEvent("click", { bubbles: true, cancelable: true }));
+  eq(v.secs[0].secH, 260, "取消跟随 → secH = 260（拉杆显示值落盘）");
+  v.repaint(false);
+  const wrapNow26 = v.listEl.querySelector(".cb-section");
+  eq(wrapNow26.style.getPropertyValue("--cb-card-h"), "260px",
+    "重绘后板块容器真写 --cb-card-h: 260px");
+  /* 拨回去 */
+  menu = openSecMenu(0);
+  const fkBack26 = menu.querySelectorAll(".cb-ctx-item.cb-ctx-follow")[1];
+  fkBack26.dispatchEvent(new W.MouseEvent("click", { bubbles: true, cancelable: true }));
+  eq(v.secs[0].secH, null, "（收拾现场）拨回「跟随内容」→ secH 清空");
+  v.closeSecMenu();
+  v.repaint(false);
+
+  /* ③ 任务勾选直接点：真 bindTaskToggles + 真 toggleTaskLine（vault.process 桩） */
+  const mkFakeBox = () => {
+    const b = document.createElement("input");
+    b.type = "checkbox";
+    b.setAttribute("disabled", "");
+    return b;
+  };
+  const fakeBoxes26 = [mkFakeBox(), mkFakeBox()];
+  const fakeBody26 = {
+    querySelectorAll: (sel) => sel === "input.task-list-item-checkbox" ? fakeBoxes26 : [],
+  };
+  const TASK_RAW26 = ["# 标题", "", "- 普通项", "- [ ] 任务一", "- [x] 任务二", "尾巴"].join("\n");
+  let procCalls26 = 0, procOut26 = null;
+  const realVault26 = v.app.vault;
+  v.app.vault = {
+    process: async (file, fn) => { procCalls26++; procOut26 = fn(TASK_RAW26); return procOut26; },
+  };
+  const fakeFile26 = { path: "x/任务.md", stat: { mtime: 0 } };
+  v.bindTaskToggles(fakeBody26, fakeFile26, TASK_RAW26);
+  ok(fakeBoxes26[0].getAttribute("disabled") === null, "任务框的 disabled 真被摘了（能点了）");
+  /* 对不上号：框(3) 比任务行(2) 多 → 整批不绑，别勾错行 */
+  const boxes3 = [mkFakeBox(), mkFakeBox(), mkFakeBox()];
+  v.bindTaskToggles(
+    { querySelectorAll: (s2) => s2 === "input.task-list-item-checkbox" ? boxes3 : [] },
+    fakeFile26, TASK_RAW26);
+  ok(boxes3.every((b) => b.getAttribute("disabled") !== null),
+    "框比任务行多 → 整批不绑（宁可点不动也别勾错行）");
+  /* 勾第 1 个框 → change → process 拿到翻面后的全文 */
+  fakeBoxes26[0].checked = true;
+  fakeBoxes26[0].dispatchEvent(new W.Event("change", { bubbles: true }));
+  await sleep26(30);
+  eq(procCalls26, 1, "勾一下 → 真写文件（vault.process 恰 1 次）");
+  ok(procOut26.indexOf("- [x] 任务一") >= 0 && procOut26.indexOf("- [x] 任务二") >= 0,
+    "写回 = 任务一翻 [x]、任务二保持 [x]（顺序映射没错位、没误翻别的行）");
+  v.app.vault = realVault26;
+
+  /* ④ 长按：550ms 触发 / 位移取消 / 提前松手不弹 */
+  const lpEl26 = document.createElement("div");
+  let lpFired26 = 0, lpAt26 = null;
+  v.bindLongPress(lpEl26, (x, y) => { lpFired26++; lpAt26 = [x, y]; });
+  const touchEvt26 = (type, x, y) => {
+    const e = new W.Event(type, { bubbles: true, cancelable: true });
+    e.touches = [{ clientX: x, clientY: y }];
+    return e;
+  };
+  lpEl26.dispatchEvent(touchEvt26("touchstart", 30, 40));
+  await sleep26(650);
+  eq(lpFired26, 1, "长按 550ms → 菜单回调恰好触发 1 次");
+  ok(lpAt26 && lpAt26[0] === 30 && lpAt26[1] === 40, "触点坐标原样交出去（菜单在手指处弹）");
+  lpEl26.dispatchEvent(touchEvt26("touchstart", 10, 10));
+  lpEl26.dispatchEvent(touchEvt26("touchmove", 60, 10));
+  await sleep26(650);
+  eq(lpFired26, 1, "手指动了 50px = 在滚动 → 取消（不误弹）");
+  lpEl26.dispatchEvent(touchEvt26("touchstart", 10, 10));
+  lpEl26.dispatchEvent(new W.Event("touchend", { bubbles: true }));
+  await sleep26(650);
+  eq(lpFired26, 1, "没按够 550ms 就松手 → 不弹");
+
+  /* ⑤ 渲染层：secH 有覆盖才写变量（继承 = 不写死，同宽度那把尺子） */
+  /* 🔴 必须走 afterChange()（persist + repaint）：repaint 第一步 loadSecs() 会从 .base 重读，
+   * 直接改 secs[0] 再 repaint = 白改（②那条「取消跟随」能过，靠的就是 afterChange）。 */
+  v.secs[0].secH = 200;
+  v.afterChange();
+  const wrapA26 = v.listEl.querySelector(".cb-section");
+  eq(wrapA26.style.getPropertyValue("--cb-card-h"), "200px", "secH=200 → 板块容器真写 --cb-card-h");
+  v.secs[0].secH = null;
+  v.afterChange();
+  const wrapB26 = v.listEl.querySelector(".cb-section");
+  eq(wrapB26.style.getPropertyValue("--cb-card-h"), "", "secH=null → 一个字都不写（继承 = 不写死）");
 
   /* --- ⑤ 只读模式：按钮该禁的禁、该换说明的换说明 --- */
   v.cfgSet("只读", true);

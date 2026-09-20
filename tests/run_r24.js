@@ -201,8 +201,8 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
     "D4：老那三个三态写回逻辑没被动过（本轮是加同一套，不是改老逻辑）");
   /* ③ 新建板块要有这个字段，否则 undefined 混进三态 */
   /* R25：初值表里多了 secW（板块级文件宽度）—— 按意图改断言，别把「结构变了」当「坏了」 */
-  ok(/propsOpen: null, secW: null, extra: \{\} \}/.test(cb),
-    "D5：addSection 的新板块初始化 propsOpen: null / secW: null");
+  ok(/propsOpen: null, secW: null, secH: null, extra: \{\} \}/.test(cb),
+    "D5：addSection 的新板块初始化 propsOpen: null / secW: null / secH: null（R26 加高度）");
   /* ④ 取值：板块级优先，没写回落视图默认 */
   ok(count(/propsOpenOn\(sec\) \{/g, cb) === 1, "D6：propsOpenOn 只定义 1 次（复写病自检）");
   const po = bodyOf(cb, "propsOpenOn(sec) {");

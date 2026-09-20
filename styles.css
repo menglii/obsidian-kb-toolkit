@@ -16,6 +16,7 @@
   gap: 10px;
   --cb-card-w: 240px;
   --cb-card-max: 1fr;
+  --cb-card-h: auto;   /* R26：板块级「卡片高度」默认 auto —— 同一行拉伸等高；设值 = 固定高 */
 }
 
 /* ---------- 顶部迷你工具条（吸顶） ---------- */
@@ -147,7 +148,9 @@
    * 「空位铺满整行」关掉时 = 滑杆宽度（卡片固定宽，滑杆真正可调） */
   grid-template-columns: repeat(auto-fit, minmax(var(--cb-card-w), var(--cb-card-max, 1fr)));
   gap: 8px;
-  align-items: start;
+  /* R26（boss 第 1 条）：同一行卡片**拉伸等高** —— 短的笔记在卡片里留白，不再参差不齐。
+   * 板块级「卡片高度」（--cb-card-h）设了值时，卡片走固定高，正文超出在卡片里滚。 */
+  align-items: stretch;
 }
 
 .cb-card {
@@ -156,6 +159,9 @@
   background-color: var(--background-primary);
   padding: 8px 10px;
   min-width: 0;
+  /* R26：板块级「卡片高度」—— 没设 = auto（同一行拉伸等高）；设了 = 固定高（正文内部滚）。
+   * 变量写在 .cb-section 上（renderSection），子板块的卡片跟着继承。 */
+  height: var(--cb-card-h, auto);
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -1007,6 +1013,8 @@
   overflow-x: hidden;
   cursor: text;
   min-width: 0;
+  /* R26：固定高度时允许被 flex 压缩 → 正文在卡片里滚（min-height:0 是能缩的前提） */
+  min-height: 0;
 }
 
 .cb-body.cb-body-loading {
@@ -1384,8 +1392,15 @@
   color: var(--text-muted);
 }
 
-/* 拉杆本体：吃 --cb-wpct（已填充比例，由 JS 写值） */
-.cb-wrange {
+/* 拉杆本体：吃 --cb-wpct（已填充比例，由 JS 写值）。
+ * 🔴 R26（boss：滑块的圆圈歪了）：选择器**必须带 input**（input.cb-wrange，特异性 0,1,1）——
+ * 原生 input[type=range]（0,1,1）会把裸 .cb-wrange（0,1,0）整条压掉：
+ *   · height 被压成原生 --slider-track-height 6px（我们写的 16px 白写）；
+ *   · thumb 吃原生 height 18px + `top: var(--slider-thumb-y)`，再叠我们的 margin-top:-5px
+ *     → 双重偏移，真机上圆圈整个飘到轨道上方。harness 没有原生 CSS，所以「harness 正、真机歪」
+ *     —— 铁律 50 第三次：改原生控件外观，先去 asar 抓原生 CSS。
+ * 全部升到 input.cb-wrange，thumb 再显式 top:0 压掉原生 top。 */
+input.cb-wrange {
   --cb-wpct: 50%;
   flex: 1 1 auto;
   min-width: 0;
@@ -1393,11 +1408,11 @@
   margin: 0;
   -webkit-appearance: none;
   appearance: none;
-  background: transparent;
+  background: transparent;   /* 压掉原生 background-color（否则 16px 高的灰底穿帮） */
   cursor: pointer;
 }
 
-.cb-wrange::-webkit-slider-runnable-track {
+input.cb-wrange::-webkit-slider-runnable-track {
   height: 5px;
   border-radius: 999px;
   background: linear-gradient(
@@ -1407,30 +1422,31 @@
   );
 }
 
-.cb-wrange::-webkit-slider-thumb {
+input.cb-wrange::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 15px;
   height: 15px;
-  margin-top: -5px;
+  margin-top: -5px;   /* (轨道5 - 滑块15) / 2 —— harness 像素实测圆环中心 = 轨道中心 */
+  top: 0;             /* 🔴 R26：压掉原生 `top: var(--slider-thumb-y)`，否则双重偏移圆圈上天 */
   border: 2px solid var(--interactive-accent);
   border-radius: 50%;
   background: var(--background-primary);
 }
 
-.cb-wrange::-moz-range-track {
+input.cb-wrange::-moz-range-track {
   height: 5px;
   border-radius: 999px;
   background: var(--background-modifier-border);
 }
 
-.cb-wrange::-moz-range-progress {
+input.cb-wrange::-moz-range-progress {
   height: 5px;
   border-radius: 999px;
   background: var(--interactive-accent);
 }
 
-.cb-wrange::-moz-range-thumb {
+input.cb-wrange::-moz-range-thumb {
   width: 13px;
   height: 13px;
   border: 2px solid var(--interactive-accent);
@@ -1438,7 +1454,7 @@
   background: var(--background-primary);
 }
 
-.cb-wrange:disabled {
+input.cb-wrange:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -1695,6 +1711,17 @@
 .cb-ctxmenu .cb-ctx-danger.is-armed {
   background-color: var(--background-modifier-error);
   font-weight: var(--font-semibold);
+}
+
+/* ---------- R26（boss 第 2 条）：任务勾选框直接点 ----------
+ * 我们把 MarkdownRenderer 渲出的 .task-list-item-checkbox 的 disabled 摘掉了
+ * （bindTaskToggles）→ 手感要像个能点的框，别还挂着 disabled 的置灰/禁止光标。 */
+.cb-body input.task-list-item-checkbox {
+  cursor: pointer;
+  accent-color: var(--interactive-accent);
+  /* 卡片里空间紧，跟正文基线对齐就行 —— 别让一个勾把行高撑大 */
+  vertical-align: middle;
+  margin-right: 2px;
 }
 
 /* kbt.css — kb-toolkit 设置页/面板增强样式（R13 界面翻新 / R16 三标签改版 / R18 排版 v3）。

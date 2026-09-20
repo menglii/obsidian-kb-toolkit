@@ -128,6 +128,7 @@ const K_CATCH = "显示收容所";
 const K_WIDTH = "卡片最小宽度";
 const K_FILL = "空位铺满整行";   // R15：默认开（R14 行为，1fr 撑满）；关 = 卡片固定为滑杆宽度
 const K_SEC_W = "文件宽度";      // R25：**板块级**卡片最小宽度（写在「板块」项里，不是视图配置）；不写 = 继承 K_WIDTH
+const K_SEC_H = "卡片高度";      // R26：**板块级**卡片固定高度；不写 = 同一行拉伸等高、短的留白
 const K_PROPS = "显示属性";     // 字符串（逗号分隔）；空 → 每篇前言前 5 个用户属性
 const K_PROS_OPEN = "属性默认展开";  // R9 键（卡片 / 就地编辑浮层里的属性区是否默认展开，默认 true）；R23 起控件在顶栏面板「看板行为」组；R24 起**板块可各自覆盖**（右键板块 → 通用设置）
 const K_BODY = "显正文";        // boolean；板块未单独指定时的默认
@@ -570,7 +571,7 @@ function gearIcon(parent) {
 const KNOWN_KEYS = ["名称", "name", "数据源", "source", "路径", "path", "标签", "tag",
   "公式", "formula", "上限", "limit", "递归深度", "depth",
   "属性", "显正文", "显示 YAML", "显示结尾双链", "属性展开", "拖动搬文件", "排序", "sort",
-  "propsOpen", "文件宽度"];
+  "propsOpen", "文件宽度", "卡片高度"];
 
 /** R12：三态字段（true / false / null=继承视图默认）的容错解析 */
 function tri(o, zhKey, enKey) {
@@ -587,6 +588,15 @@ function secWidth(v) {
   const n = parseFloat(v);
   if (!isFinite(n) || n <= 0) return null;   // 0 / 负数 = 没设（别夹成 160 —— 那是「显式设成最小」）
   return Math.max(160, Math.min(480, Math.round(n / 10) * 10));
+}
+
+/** R26：板块级「卡片高度」容错解析 —— 空 / 非数 → null（= 同一行拉伸**等高**、短的留白）；
+ *  有值 → 夹到 120–480 并对齐到 10（卡片固定高，正文超出在卡片里滚）。 */
+function secHeight(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = parseFloat(v);
+  if (!isFinite(n) || n <= 0) return null;
+  return Math.max(120, Math.min(480, Math.round(n / 10) * 10));
 }
 
 function normalizeSection(raw, i) {
@@ -615,6 +625,7 @@ function normalizeSection(raw, i) {
     links: tri(o, "显示结尾双链", "links"), // R12：null=继承视图；false=掐掉结尾「关联笔记」段
     propsOpen: tri(o, "属性展开", "propsOpen"), // R24：null=继承视图；true/false = 本板块属性区默认展开/折叠
     secW: secWidth(o[K_SEC_W] !== undefined ? o[K_SEC_W] : o.secWidth), // R25：null=继承视图的 K_WIDTH
+    secH: secHeight(o[K_SEC_H] !== undefined ? o[K_SEC_H] : o.secHeight), // R26：null=同行拉伸等高
     sort: str(o[K_SORT] !== undefined ? o[K_SORT] : o.sort),   // "" = 沿用 base 顺序
     extra: {},
   };
@@ -641,6 +652,7 @@ function sectionToRaw(sec) {
   if (sec.links === true || sec.links === false) o["显示结尾双链"] = sec.links;
   if (sec.propsOpen === true || sec.propsOpen === false) o["属性展开"] = sec.propsOpen;
   if (sec.secW !== null && sec.secW !== undefined) o[K_SEC_W] = sec.secW;   // R25
+  if (sec.secH !== null && sec.secH !== undefined) o[K_SEC_H] = sec.secH;   // R26
   if (sec.sort) o[K_SORT] = sec.sort;
   const ex = sec.extra || {};
   for (const k of Object.keys(ex)) if (!Object.prototype.hasOwnProperty.call(o, k)) o[k] = ex[k];
@@ -1573,6 +1585,10 @@ class CreationBoardView extends BasesViewBase {
       wrap.style.setProperty("--cb-card-w", sw0 + "px");
       if (!this.optBool(K_FILL, true)) wrap.style.setProperty("--cb-card-max", sw0 + "px");
     }
+    /* R26（boss 第 1 条）：板块级「卡片高度」—— 设了 = 卡片**固定**这个高度（正文超出在卡片里滚）；
+       没设 = 一个字都不写，同一行走 CSS 拉伸**等高**、短的留白（别把默认值写死，铁律同宽度）。 */
+    const sh0 = this.secHeightOf(sec);
+    if (sh0 !== null) wrap.style.setProperty("--cb-card-h", sh0 + "px");
     const collapsed = this.isCollapsed(sec, null, false);
 
     const head = wrap.createDiv({ cls: "cb-section-head" });
@@ -1581,7 +1597,14 @@ class CreationBoardView extends BasesViewBase {
     /* R24（boss 第 1 条）：双击板块名 → 就地改名（原来只能去顶栏面板的编辑行里改） */
     if (this.secConfigurable(sec) && !this.readonly()) {
       nameEl.addClass("cb-sec-name-edit");
-      nameEl.setAttr("title", "双击改名；拖动这一行可以给板块排序");
+      nameEl.setAttr("title", "点一下改名；拖动这一行可以给板块排序");
+      /* R26（boss 第 5 条）：**单击**就改名（Windows 重命名文件那种手感）——
+         拖动排序走 dragstart、不产生 click，互不打架；beginRenameSection 内部
+         有 __cbRenaming 防重入，连点也不会开两个输入框。dblclick 保留（老习惯不破）。 */
+      nameEl.addEventListener("click", (evt) => {
+        evt.stopPropagation();
+        this.beginRenameSection(sec, nameEl);
+      });
       nameEl.addEventListener("dblclick", (evt) => {
         evt.preventDefault();
         evt.stopPropagation();
@@ -1652,6 +1675,9 @@ class CreationBoardView extends BasesViewBase {
       evt.stopPropagation();
       this.openSecMenu(sec, evt.clientX, evt.clientY);
     });
+    /* R26（boss 第 4 条）：手机端没有右键 → 长按板块标题就地呼出**同一份**菜单
+       （桌面端没有 touch 事件，完全无感知；拖动排序是 touchmove 超阈值自动取消） */
+    this.bindLongPress(head, (x, y) => this.openSecMenu(sec, x, y));
 
     const body = wrap.createDiv({ cls: "cb-section-body" });
 
@@ -1828,6 +1854,12 @@ class CreationBoardView extends BasesViewBase {
       evt.preventDefault();
       evt.stopPropagation();
       this.openCardMenu(card, entry, evt.clientX, evt.clientY);
+    });
+    /* R26（boss 第 4 条）：手机端长按卡片 → 呼出同一份笔记操作菜单。
+      链接 / 输入框 / 按钮上不抢（那里长按有系统自己的语义：选择、预览）。 */
+    this.bindLongPress(card, (x, y, tgt) => {
+      if (tgt && tgt.closest && tgt.closest("a, input, textarea, button, .cb-pros-toggle")) return;
+      this.openCardMenu(card, entry, x, y);
     });
 
     /* 第 10 轮：拖动排序（HTML5 DnD，同板块内） */
@@ -2160,6 +2192,13 @@ class CreationBoardView extends BasesViewBase {
     return secWidth(s.secW);
   }
 
+  /** R26：这个板块自己的「卡片高度」（null = 同一行拉伸等高、短的留白） */
+  secHeightOf(sec) {
+    const s = (sec && sec.spec) || null;
+    if (!s) return null;
+    return secHeight(s.secH);
+  }
+
   /** 这个板块有没有「板块级覆盖」（决定「重置设置」是否可点） */
   secHasOverride(i) {
     const s = this.secs[i];
@@ -2169,6 +2208,7 @@ class CreationBoardView extends BasesViewBase {
       || s.links === true || s.links === false
       || s.propsOpen === true || s.propsOpen === false
       || (s.secW !== null && s.secW !== undefined)
+      || (s.secH !== null && s.secH !== undefined)
       || (s.props && s.props.length > 0)
       || !!s.sort;
   }
@@ -2182,6 +2222,7 @@ class CreationBoardView extends BasesViewBase {
     s.links = null;
     s.propsOpen = null;
     s.secW = null;
+    s.secH = null;
     s.props = [];
     s.sort = "";
     this.saveState = "已重置「" + s.name + "」（回继承视图默认）";
@@ -2401,6 +2442,71 @@ class CreationBoardView extends BasesViewBase {
       paint();
       return row;
     };
+    /** R26（boss 第 1 条）：板块级「卡片高度」，跟「文件宽度」同一个两行套路 ——
+     *  ①「卡片高度 [拉杆] NNN px」 ② 打勾项「跟随内容」
+     *  · 「跟随内容」勾上 = 不写覆盖：同一行卡片 CSS 拉伸**等高**，短的留白（本轮新默认）
+     *  · 不勾 = 卡片**固定**这个高度，长文在卡片里滚（--cb-card-h） */
+    const hrowSec = (si2, secObj) => {
+      const isFollowH = () => this.secs[si2].secH === null;
+      const row = menu.createDiv({ cls: "cb-wrow cb-ctx-wrow" });
+      const lb = row.createSpan({ cls: "cb-wlb", text: "卡片高度" });
+      lb.setAttr("title", "只对「" + secName + "」：卡片固定高度（120 – 480 px）");
+      const rg = row.createEl("input", { cls: "cb-wrange", type: "range" });
+      rg.setAttr("min", "120");
+      rg.setAttr("max", "480");
+      rg.setAttr("step", "10");
+      const H0 = this.secHeightOf(secObj);
+      rg.value = String(H0 !== null ? H0 : 260);
+      const val = row.createSpan({ cls: "cb-wval", text: rg.value + " px" });
+      const fk = menu.createDiv({ cls: "cb-ctx-item cb-ctx-chk cb-ctx-follow" });
+      fk.setAttr("data-key", "跟随内容");
+      fk.setAttr("title", "勾上 = 同一行卡片拉伸等高、短的留白；不勾 = 卡片固定这个高度，长文在卡片里滚");
+      const tick = fk.createSpan({ cls: "cb-ctx-tick", text: "" });
+      fk.createSpan({ cls: "cb-ctx-chk-lb", text: "跟随内容" });
+      const hnum2 = (v) => { const n = parseFloat(v); return isFinite(n) ? n : 260; };
+      const hpctOf2 = (v) => (((hnum2(v) - 120) / 360) * 100).toFixed(1) + "%";
+      const paintH = () => {
+        const follow = isFollowH();
+        rg.disabled = follow;
+        val.style.opacity = follow ? "0.4" : "1";
+        rg.style.setProperty("--cb-wpct", hpctOf2(rg.value));
+        val.setText(rg.value + " px");
+        tick.setText(follow ? "✓" : "");
+      };
+      for (const el of [rg, fk]) {
+        el.addEventListener("mousedown", (evt) => evt.stopPropagation());
+        el.addEventListener("click", (evt) => evt.stopPropagation());
+      }
+      rg.addEventListener("input", () => {
+        val.setText(rg.value + " px");
+        rg.style.setProperty("--cb-wpct", hpctOf2(rg.value));
+        const we = secObj.__wrapEl;
+        if (we) we.style.setProperty("--cb-card-h", hnum2(rg.value) + "px");
+      });
+      rg.addEventListener("change", () => {
+        const n = Math.max(120, Math.min(480, Math.round(hnum2(rg.value) / 10) * 10));
+        this.secs[si2].secH = n;
+        this.saveState = "「" + secName + "」卡片高度 → " + n + " px";
+        this.afterChange();
+        this.closeSecMenu();
+      });
+      fk.addEventListener("click", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        if (isFollowH()) {
+          const n = Math.max(120, Math.min(480, Math.round(hnum2(rg.value) / 10) * 10));
+          this.secs[si2].secH = n;
+          this.saveState = "「" + secName + "」卡片高度 → " + n + " px";
+        } else {
+          this.secs[si2].secH = null;
+          this.saveState = "「" + secName + "」卡片高度 → 跟随内容";
+        }
+        this.afterChange();
+        this.closeSecMenu();
+      });
+      paintH();
+      return row;
+    };
     /** 「文件操作」那组是**视图级**的 → 用 Windows 那种打勾项，不用三态（免得冒充板块级） */
     const chk = (label, key, dflt, tip) => {
       const el = menu.createDiv({ cls: "cb-ctx-item cb-ctx-chk" });
@@ -2427,6 +2533,7 @@ class CreationBoardView extends BasesViewBase {
       triRow("属性展开", "propsOpen", this.propsOpenDefault(), "卡片 / 就地编辑浮层里的属性区默认展开");
       triRow("内容展开", "body", this.viewBodyDefault(), "＝原来的「显正文」；关 = 只显示标题与属性");
       wrowSec(si, sec);   // R25：板块级「文件宽度」（跟随看板 = 不写覆盖）
+      hrowSec(si, sec);   // R26：板块级「卡片高度」（跟随内容 = 不写覆盖，同一行拉伸等高）
       const has = this.secHasOverride(si);
       item(has ? "重置设置" : "重置设置（已是默认）", () => this.resetSection(si), !has);
       let helpOpen = false;
@@ -2436,7 +2543,7 @@ class CreationBoardView extends BasesViewBase {
         helpOpen = !helpOpen;
         helpBox.toggleClass("is-hidden", !helpOpen);
         helpBox.setText("「" + secName + "」：数据源 " + (sec.spec.source || "") + "，"
-          + "三态项（继承 / 开 / 关）与「文件宽度」都只改这一块；"
+          + "三态项（继承 / 开 / 关）与「文件宽度 / 卡片高度」都只改这一块；"
           + "双击板块名可改名，拖动标题可排序；"
           + "「本板块」组里的新建文件 / 删除也只动这一块，"
           + "「新建板块」与「文件操作」是整个看板共用的。");
@@ -2558,6 +2665,81 @@ class CreationBoardView extends BasesViewBase {
    *   🔴 坑：`折叠` 状态的键就是**板块名**（`foldKey`）：改名不迁移 = 折叠状态凭空丢。
    *   手动顺序的键是「数据源:路径/标签」，跟名字无关，不用动。
    * ============================================================ */
+  /** R26（boss 第 4 条）：手机端没有右键键 → 长按（约 550ms、位移 ≤ 10px）就地呼出菜单。
+   *  桌面端没 touch 事件，零感知；手指动了（滚动/拖动）立刻取消，不会误弹。 */
+  bindLongPress(el, onFire) {
+    if (!el || typeof onFire !== "function") return;
+    let timer = null, sx = 0, sy = 0;
+    const stop = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    el.addEventListener("touchstart", (evt) => {
+      const te = evt.touches && evt.touches[0];
+      if (!te) return;
+      sx = te.clientX; sy = te.clientY;
+      stop();
+      timer = setTimeout(() => {
+        timer = null;
+        try { evt.preventDefault(); } catch (e) {}   /* 别让它接着变成滚动 / 系统长按 */
+        onFire(sx, sy, evt.target);
+      }, 550);
+    }, { passive: false });
+    el.addEventListener("touchmove", (evt) => {
+      if (!timer) return;
+      const te = evt.touches && evt.touches[0];
+      if (te && (Math.abs(te.clientX - sx) > 10 || Math.abs(te.clientY - sy) > 10)) stop();
+    }, { passive: true });
+    el.addEventListener("touchend", stop, { passive: true });
+    el.addEventListener("touchcancel", stop, { passive: true });
+  }
+
+  /** R26（boss 第 2 条）：卡片正文里的任务勾选框**直接点**就能勾/取消，不用点进笔记。
+   *  原理：MarkdownRenderer 渲出的 .task-list-item-checkbox 自带 disabled（点了没反应，
+   *  Chrome 对 disabled 控件连 click 都不发）→ 这里摘掉 disabled 启用它，
+   *  第 n 个框 ↔ 全文第 n 个任务行（- [ ] / - [x]），点一下就把笔记里那一行反过来写。
+   *  🔴 顺序映射的前提：预览正文是全文的**前缀**（去前言 + 截断都只动头/尾）——
+   *  框比任务行还多就是对不上号，宁可不绑也别勾错行。 */
+  bindTaskToggles(el, file, raw) {
+    if (!el || !file || this.readonly()) return;
+    let boxes = [];
+    try { boxes = Array.prototype.slice.call(el.querySelectorAll("input.task-list-item-checkbox")); }
+    catch (e) { return; }
+    if (!boxes.length) return;
+    const lines = String(raw == null ? "" : raw).split(/\r?\n/);
+    const taskIdx = [];
+    for (let i = 0; i < lines.length; i++) {
+      if (/^[\s>]*[-*+]\s+\[( |x|X)\]/.test(lines[i])) taskIdx.push(i);
+    }
+    if (boxes.length > taskIdx.length) return;   /* 对不上号 → 不绑，宁可点不动也别勾错行 */
+    for (let k = 0; k < boxes.length; k++) {
+      const box = boxes[k];
+      try { box.removeAttribute("disabled"); } catch (e) { try { box.disabled = false; } catch (e2) {} }
+      /* 点勾选框 ≠ 点正文：别把编辑浮层带出来（正文区 click = 就地编辑） */
+      box.addEventListener("click", (evt) => evt.stopPropagation());
+      box.addEventListener("mousedown", (evt) => evt.stopPropagation());
+      box.addEventListener("change", () => {
+        this.toggleTaskLine(file, taskIdx[k], !!box.checked, box);
+      });
+    }
+  }
+
+  /** R26：把笔记里第 li 行的任务标记翻面（原子写走 vault.process，老接口退 read/modify）。 */
+  toggleTaskLine(file, li, done, box) {
+    const flip = (content) => {
+      const lines = String(content == null ? "" : content).split(/\r?\n/);
+      const line = lines[li];
+      if (line === undefined) return content;
+      lines[li] = done ? line.replace(/\[( |x|X)\]/, "[x]") : line.replace(/\[( |x|X)\]/, "[ ]");
+      return lines.join("\n");
+    };
+    const v = this.app && this.app.vault;
+    if (v && typeof v.process === "function") {
+      Promise.resolve(v.process(file, flip)).catch(() => {});
+    } else if (v && typeof v.read === "function" && typeof v.modify === "function") {
+      v.read(file).then((c) => v.modify(file, flip(c))).catch(() => {});
+    } else {
+      try { if (box) box.checked = !box.checked; } catch (e) {}   /* 写不了 → 至少视图别骗人 */
+    }
+  }
+
   beginRenameSection(sec, nameEl) {
     if (this.readonly() || !nameEl || nameEl.__cbRenaming) return null;
     const i = this.secIndexOf(sec);
@@ -2982,6 +3164,7 @@ class CreationBoardView extends BasesViewBase {
       el.empty();
       el.createDiv({ cls: "cb-body-error", text: "正文渲染失败：" + (e && e.message ? e.message : String(e)) });
     }
+    this.bindTaskToggles(el, file, raw);   /* R26：任务勾选框直接点 */
     if (truncated) {
       el.createDiv({ cls: "cb-body-more", text: "…（已截断 " + item.chars + " 字 / 全文约 " + rawLen + " 字 · 双击卡片看全文）" });
     }
@@ -4667,7 +4850,7 @@ class CreationBoardView extends BasesViewBase {
       this.renderPanel();
       return -1;
     }
-    const base = { name: "新板块", source: type, rawSource: type, path: "", tag: "", formula: "", limit: 50, depth: 1, props: [], body: null, propsOpen: null, secW: null, extra: {} };
+    const base = { name: "新板块", source: type, rawSource: type, path: "", tag: "", formula: "", limit: 50, depth: 1, props: [], body: null, propsOpen: null, secW: null, secH: null, extra: {} };
     if (type === "catchall") base.name = "其它";
     if (type === "formula") {
       const names = this.collectFormulas();

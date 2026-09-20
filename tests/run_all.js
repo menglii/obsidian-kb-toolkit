@@ -1,4 +1,4 @@
-/* 全量回归 runner：顺序跑 r1~r25
+/* 全量回归 runner：顺序跑 r1~r26
  *（R19 = 五条需求：文件位置属性 / 开关扶正 / 状态成栏 / 按钮素色 / 提示精简；
  *  R20 = 四条需求：状态只留是否启用 / 帮助入口挪顶栏 / 自绘齿轮图标 / 看板设置界面重做；
  *  R20b = 看板「真 DOM 冒烟」——源码级正则抓不到的运行时错在这里兜底；
@@ -11,13 +11,16 @@
  *         右键鼠标处弹设置小窗（刷新 / 通用设置 / 笔记内容 / 文件操作三组），
  *         「属性展开」升成板块级三态、板块之间加一条分隔线；
  *  R25 = 右键菜单里再添 新建文件 / 新建板块 / 删除板块 + 「单个板块内文件宽度」
- *         （宽度是**板块级覆盖**：不写 = 跟随看板那条拉杆，菜单里那行复用 .cb-wrow），
+ *         （宽度是**板块级覆盖**：不写 = 跟随看板那条拉杆，菜单里那行复用 .cb-wrow）；
+ *  R26 = 同一行卡片等高 + 板块级「卡片高度」/ 任务勾选框直接点 / 滑块修歪
+ *         （原生 input[type=range] 压制 → 选择器升 input.cb-wrange + thumb top:0）/
+ *         长按呼出右键菜单（手机端）/ 板块名单击改名，
  * 聚合两代输出格式（PASS/FAIL 与 通过/失败）。 */
 const { execFileSync } = require("child_process");
 const path = require("path");
 const NODE = process.execPath;
 const FILES = ["run_r1", "run_r2", "run_r3", "run_r3b", "run_r4", "run_r4b", "run_r5",
-  "run_r6", "run_r7", "run_r8", "run_r9", "run_r10", "run_r11", "run_r12", "run_r13", "run_r14", "run_r15", "run_r16", "run_r17", "run_r18", "run_r19", "run_r20", "run_r20b", "run_r21", "run_r22", "run_r23", "run_r24", "run_r25"];
+  "run_r6", "run_r7", "run_r8", "run_r9", "run_r10", "run_r11", "run_r12", "run_r13", "run_r14", "run_r15", "run_r16", "run_r17", "run_r18", "run_r19", "run_r20", "run_r20b", "run_r21", "run_r22", "run_r23", "run_r24", "run_r25", "run_r26"];
 
 const rounds = parseInt(process.argv[2] || "3", 10);
 let grandTotal = 0, grandFail = 0;

@@ -2,6 +2,41 @@
 
 本文件记录 kb-toolkit 每个轮次的可验收交付。版本号只在收尾轮 bump。
 
+## 未发布 — R26（老板五条：等高留白 + 卡片高度 + 勾选框直点 + 滑块圆圈 + 手机长按 + 单击改名）
+
+**老板要求**（2026-09-20，五条带截图）：
+
+> 1. 笔记长度不够会导致同一排窗格上下参差不齐 → 统一窗格高度，不够就留白；右键菜单加「窗口显示高度」设置
+> 2. 可勾选的框希望直接点就能勾，不必点进笔记
+> 3. 滑块的圆圈图标歪了，修一下
+> 4. 手机端长按任务栏自动呼出右键菜单，要确保手机端体验
+> 5. 板块重命名改成微软重命名文件那种：悬停在名字上，左键按一下就开始改
+
+| 老板原话 | 落地 |
+| --- | --- |
+| ① 等高 + 留白 | `.cb-grid` 加 `align-items: stretch`（本就是栅格默认，明确写出）+ `.cb-card { height: var(--cb-card-h, auto) }`。**默认（不设高度）= 同一行拉伸等高、短的留白**——老板要的主行为不设开关直接生效 |
+| ① 卡片高度设置 | 右键菜单「通用设置」组新增板块级「**卡片高度**」：拉杆 120–480 / step 10 + px 回显 + **「跟随内容」打勾项**（勾上 = 等高留白；不勾 = 固定高，长文在卡片里滚）。新键 `卡片高度`（`K_SEC_H`）存在板块数组里，null = 跟随；只在有覆盖时写回，老配置一个字不动 |
+| ② 勾选框直点 | `bindTaskToggles()`：把 MarkdownRenderer 渲出的 `.task-list-item-checkbox` 的 `disabled` 摘掉，第 n 个框 ↔ 全文第 n 个任务行，`change` 时 `vault.process` 原子翻面那一行。**框比任务行多就对不上号 → 宁可不绑也别勾错行**；readonly 不绑；点框 `stopPropagation`（别把就地编辑浮层带出来） |
+| ③ 滑块圆圈歪 | 🔴 **根因（asar 取证）**：原生 `input[type=range]`（特异性 0,1,1）把裸 `.cb-wrange`（0,1,0）**整条压掉**——height 被压成 4px、thumb 吃原生 `height:18px + top: var(--slider-thumb-y)=-6px` 再叠我们的 `margin-top:-5px` → 双重偏移圆圈上天。harness 没喂原生 CSS 所以「harness 正、真机歪」（**铁律 50 第三次**）。修 = 全部升到 `input.cb-wrange`（打平 0,1,1，源码顺序在后）+ thumb 显式 `top:0` |
+| ④ 手机长按 | `bindLongPress(el, onFire)`：touchstart 起 550ms 定时器、位移 ≤10px 才触发，`preventDefault` 掐掉系统长按；动了（滚动/拖动）立刻取消。**板块标题条 → 板块右键菜单；卡片 → 笔记操作菜单**（链接/输入框/按钮上不抢）。桌面端没有 touch，零感知 |
+| ⑤ 单击改名 | 板块名从**双击**改**单击**触发 `beginRenameSection`（Windows 手感）；拖动排序走 `dragstart` 不产生 click，互不打架；`__cbRenaming` 防重入。**dblclick 保留**（老习惯不破） |
+
+**阿盘补的几条（都写进 vendor 注释）**
+
+1. 「统一高度」的正确默认就是**栅格的 stretch**：不该做成开关，短的留白本来就是老板要的；「卡片高度」是**覆盖项**，设了才固定。
+2. 勾选框翻面走 `vault.process`（原子），老接口退 `read/modify`；都失败时把框视图翻回去，**视图不许骗人**。
+3. 🔴 **像素层抓到 harness 自身的雷**：`#probe` 用 `left:-9999px` 藏——R26 的 JSON 宽度**超过 9999px**，元素右端**缩回视口里**把截图污染了（R24/R25 的 JSON 短才没炸）。**负 left 挡不住超宽内容**，改 `opacity:0 + 收窄 + overflow:hidden`（→ 铁律 63）。
+4. 🔴 `getComputedStyle(el, "::-webkit-slider-thumb")` 在 Chrome 里返回的是**元素自身**样式（实测 width=100px = 原生 input 宽）——**伪元素读不到**，圆圈的几何只能**数像素**（`check_r26_shots.py`：value=120 → 轨道整条底色，强调色只可能来自圆圈，扫出来圈心 40.5 vs 杆心 40、直径 15）。
+5. 主题变量不再依赖桌面那张效果图（被清掉就 FileNotFoundError）——抽成插件目录自包含的 `tmp/obsidian_theme_vars.css`。
+
+**落地清单（`vendor/creation-board.js` 191,393 字符 → 构建 `main.js` 543,396 B / `styles.css` 65,116 B）**
+
+- `vendor/creation-board.js`：`K_SEC_H`/`secHeight()`/`secHeightOf()`/normalize·toRaw·secHasOverride·resetSection 认 `secH`（同 `secW` 一套规矩）；`renderSection` 有覆盖才写 `--cb-card-h`；`hrowSec()`（跟 R25 `wrowSec` 同一个两行套路）；`bindLongPress()`/`bindTaskToggles()`/`toggleTaskLine()`；板块名 click→`beginRenameSection`；卡片长按→`openCardMenu`
+- `styles_src/cb.css`：`--cb-card-h:auto` 默认；`.cb-grid` stretch；`.cb-card height: var(--cb-card-h, auto)`；`.cb-body min-height:0`；拉杆全组升 `input.cb-wrange` + thumb `top:0`；`.cb-body input.task-list-item-checkbox`（pointer / accent-color / middle）
+- 测试：`run_r26.js` **85**（新）；老断言按铁律 49 重写（r3b 白名单收 `--cb-card-h`、r24/r25 改名/菜单组文案、r20b 补 R26 真 DOM 段 19 条）
+
+**验证**：`run_all.js 3` → **2050/轮 × 3 = 6150 全绿**；`run_r20b` 227→**248**；真引擎几何 **55** + 像素 **19**（圆圈圈心 40.5 vs 杆心 40、直径 15；轨道 5px；短卡底部 46px 干净留白）；R24 几何 44 + 像素 8、R25 几何 110 + 像素 12（harness 修掉 `left:-9999px` 雷与桌面 MOCK 依赖后**全数复跑**）；沙盒 229 + 真库副本 247 + 独立套件 45 全绿。**真机验收 5 条**：同行卡片是否等高留白 → 「卡片高度」不勾「跟随内容」后是否只有这块固定高 → 卡片里勾任务是否直接生效且不弹编辑器 → 拉杆圆圈是否回正 → 手机长按是否呼出菜单（桌面查：单击板块名直接改名）。
+
 ## 未发布 — R25（老板一条：「右键菜单里新增新建文件；删除板块；新建板块；新增对单个板块内文件宽度的设置」）
 
 **老板要求**（2026-09-19，紧接着 R24 的验收反馈）：

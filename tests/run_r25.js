@@ -65,7 +65,8 @@ console.log("\n== R25 · 配置层：板块级「文件宽度」==");
 ok(count(/const K_SEC_W = "文件宽度";/g, cb) === 1, "A1：K_SEC_W = 文件宽度 只定义 1 次（复写病自检）");
 ok(/const K_SEC_W = "文件宽度";/.test(cbRaw) && /R25：\*\*板块级\*\*卡片最小宽度/.test(cbRaw),
   "A2：常量带注释说明它是**板块级**（不是视图配置那把 K_WIDTH）");
-ok(cb.indexOf('"propsOpen", "文件宽度"]') >= 0, "A3：KNOWN_KEYS 认「文件宽度」（写回不会漏、也不会被塞进 extra）");
+ok(cb.indexOf('"propsOpen", "文件宽度", "卡片高度"]') >= 0,
+  "A3：KNOWN_KEYS 认「文件宽度 / 卡片高度」（R26 连高度键一起认，写回不会漏、也不会被塞进 extra）");
 
 /* —— 真的把 secWidth() 抠出来执行（比正则断言强：能验夹值/对齐/空值语义） —— */
 const swM = cbRaw.match(/function secWidth\(v\) \{[\s\S]*?\n\}/);
@@ -114,7 +115,8 @@ ok(swf.indexOf("sec && sec.spec") >= 0, "A28：宽度挂在板块配置项上（
 ok(swf.indexOf("return secWidth(s.secW);") >= 0, "A29：走同一把夹值函数（不另写一套解析）");
 
 const add = bodyOf(cb, "addSection(type) {");
-ok(add.indexOf("secW: null, extra: {}") >= 0, "A30：新建板块的宽度初值 = null（继承）");
+ok(add.indexOf("secW: null, secH: null, extra: {}") >= 0,
+  "A30：新建板块的宽度/高度初值都 = null（R26 连 secH 一起继承）");
 ok(add.indexOf("return idx;") >= 0, "A31：addSection 返回新板块下标（菜单要靠它翻开那一行）");
 ok(add.indexOf("return -1;") >= 0, "A32：撞收容所时返回 -1（菜单据此不翻面板、不弹「已新建」）");
 
