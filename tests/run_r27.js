@@ -59,7 +59,14 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
 const stylesCss = fs.readFileSync(path.join(PLUG, "styles.css"), "utf8");
 
 /* R27 的 CSS 段（从本段标题到文件尾 —— 它现在是最后一段） */
-const cssSeg = cssRaw.slice(cssRaw.indexOf("R27（boss 5 条 + 延伸）"));
+/* R27 段 = 从 R27 横幅到**下一个轮次横幅**为止。
+   🔴 R29 修：原来 `slice(indexOf("R27…"))` 一路切到**文件尾** —— 后面每一轮追加的 CSS
+   都被算进「R27 段」。R29 往尾上加了窄屏 `.cb-grid` 覆写 → D4 立刻假报
+   「R27 段里出现第二条 .cb-grid」。按铁律 49 按意图收口：段就是段。 */
+const r27Start = cssRaw.indexOf("R27（boss 5 条 + 延伸）");
+const r28MarkIdx = cssRaw.indexOf("R28（老板报障", r27Start);
+const r27End = r28MarkIdx < 0 ? cssRaw.length : cssRaw.lastIndexOf("/*", r28MarkIdx);
+const cssSeg = cssRaw.slice(r27Start, r27End);
 
 /* ================= A. 配置层：三个新键 ================= */
 console.log("\n== R27 · 配置层：网格间距 / 卡片默认高度 / 隐藏空板块 ==");

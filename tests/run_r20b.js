@@ -1121,6 +1121,184 @@ function makeConfig(obj) {
   eq(doneOrder.length, 2, "另外两篇真的渲了（不是被一起吞掉）");
   ok(/正文 3\/3/.test(v.countEl.textContent), "工具条「正文 3/3」（计数不会永远差一个）");
 
+  /* ================= R29：①改名保位 + ②编辑浮层 Ctrl/Cmd+滚轮缩放字号 ================= */
+  head("R29 · ①改名后保住手动顺序里的位置 / ②编辑浮层字号就地缩放");
+
+  /* ---------- ① 改名保位：手动顺序点名 → 改名 → 位置不许动 ---------- */
+  /* 现场摆成「自然顺序」与「手动顺序」**相反**：自然 [笔记2, 笔记1]、手动点名 [笔记1, 笔记2]
+     → 渲染应是 [笔记1, 笔记2]。只有这样，「改完名这张卡跑到最后面」才量得出来
+     （改名前第 0 格 → 改名后必须还是第 0 格，否则就是老板报的那个 bug）。 */
+  const mkEntry29 = (p, fm) => ({
+    file: {
+      path: p, name: p.split("/").pop(), basename: p.split("/").pop().replace(/\.md$/, ""),
+      extension: "md", parent: { path: p.split("/").slice(0, -1).join("/") }, stat: { mtime: 1, size: 4 },
+    },
+    frontmatter: fm || {}, getValue() { return null; },
+  });
+  const n2 = mkEntry29("01_新知识库/笔记2.md", { 简介: "乙" });
+  const n1 = mkEntry29("01_新知识库/笔记1.md", { 简介: "甲", 状态: "在做" });
+  v.data = { data: [n2, n1], groupedData: [] };      // 自然顺序：笔记2 在前
+  v.cfgSet("板块", [{ "名称": "收件箱", "数据源": "folder", "路径": "01_新知识库", "递归深度": 1, "上限": 30 }]);
+  v.cfgSet("只读", null);
+  v.cfgSet("手动顺序", { "folder:01_新知识库": ["01_新知识库/笔记1.md", "01_新知识库/笔记2.md"] });
+  v.manualOrder = v.loadManualOrder();
+  v.sig = null;
+  v.repaint(true);
+  const pathsB = [...v.listEl.querySelectorAll(".cb-card")].map((c) => c.getAttribute("data-path"));
+  eq(pathsB.length, 2, "（前置）两篇都渲染出来了");
+  eq(pathsB[0], "01_新知识库/笔记1.md",
+    "（前置）手动顺序压过自然顺序：笔记1 排在第 0 格（这就是老板看到的那个位置）");
+
+  const card1 = [...v.listEl.querySelectorAll(".cb-card")]
+    .find((c) => c.getAttribute("data-path") === "01_新知识库/笔记1.md");
+  ok(!!card1, "（前置）拿到笔记1 那张卡");
+  const ent1 = card1 && card1.__cbEntry;
+  eq(ent1 && ent1.file.path, "01_新知识库/笔记1.md", "（前置）卡片上挂着真实 entry");
+
+  const input1 = v.beginRename(card1, ent1);
+  ok(!!input1, "单击标题 → 真的弹出改名输入框");
+  input1.value = "改过名的笔记";
+  key(input1, "Enter");
+  await new Promise((r) => setTimeout(r, 30));
+
+  eq(ent1.file.path, "01_新知识库/改过名的笔记.md", "真 renameFile 改了路径（名字确实改成了）");
+  const mo = v.loadManualOrder();
+  const moArr = mo["folder:01_新知识库"];
+  ok(Array.isArray(moArr), "手动顺序的**键**照旧是「folder:01_新知识库」（改的是取值不是键 —— run_r24 B20 钉的那条）");
+  eq(moArr && moArr.length, 2, "顺序表长度不变（没多没少）");
+  eq(moArr && moArr[0], "01_新知识库/改过名的笔记.md", "🔴 第 0 格就地换成新路径");
+  eq(moArr && moArr[1], "01_新知识库/笔记2.md", "另一格原样不动");
+  eq((v.lastRename || {}).from, "01_新知识库/笔记1.md", "lastRename.from = 改名前的旧路径");
+  eq((v.lastRename || {}).to, "01_新知识库/改过名的笔记.md", "lastRename.to = 新路径");
+  const moWrote = SAVES.filter((s) => s.key === "手动顺序").slice(-1)[0];
+  ok(!!moWrote && moWrote.val && moWrote.val["folder:01_新知识库"][0] === "01_新知识库/改过名的笔记.md",
+    "迁好的顺序表真写回了 .base（config.set('手动顺序')）");
+
+  v.sig = null;
+  v.repaint(true);
+  const pathsA = [...v.listEl.querySelectorAll(".cb-card")].map((c) => c.getAttribute("data-path"));
+  eq(pathsA[0], "01_新知识库/改过名的笔记.md",
+    "🔴 改名后重画：这张卡**仍在第 0 格**（这就是老板要的「保留原文件位置」）");
+  eq(pathsA[1], "01_新知识库/笔记2.md", "另一张卡也没被顶走");
+
+  /* 反证（走**真渲染**）：把顺序表换回**旧路径** = 不打这个补丁的世界 → 它立刻被甩到最后 */
+  v.cfgSet("手动顺序", { "folder:01_新知识库": ["01_新知识库/笔记1.md", "01_新知识库/笔记2.md"] });
+  v.manualOrder = v.loadManualOrder();
+  v.sig = null;
+  v.repaint(true);
+  const pathsNeg = [...v.listEl.querySelectorAll(".cb-card")].map((c) => c.getAttribute("data-path"));
+  eq(pathsNeg[0], "01_新知识库/笔记2.md",
+    "反证（真渲染）：顺序表里还留着旧路径时，改过名那张因「表里查不到」被甩到最后 —— 正是老板看到的现场");
+  eq(pathsNeg[1], "01_新知识库/改过名的笔记.md", "它落在最后一格（这就是要修掉的那个位置）");
+
+  /* ---------- ② 编辑浮层：Ctrl/Cmd + 滚轮 就地缩放字号 ---------- */
+  /* 桩里补两个类：mountEditor 是**惰性**读 Obsidian 的 WorkspaceLeaf / MarkdownView 的
+     （桩里没有就早退成 "unsupported"，浮层本体根本测不到）。补上 → mountEditor 真跑。 */
+  if (!STUB.WorkspaceLeaf) {
+    STUB.WorkspaceLeaf = class {
+      constructor(app) { this.app = app; }
+      async open(view) { this.view = view; }
+      detach() {}
+    };
+  }
+  if (!STUB.MarkdownView) {
+    STUB.MarkdownView = class {
+      constructor(leaf) {
+        this.leaf = leaf;
+        this.containerEl = document.createElement("div");
+        this.containerEl.className = "markdown-source-view view-content";
+        this.containerEl.createDiv({ cls: "view-header" });   // 桩要保真：containerEl 自带 .view-header
+        this.editor = { cm: { scrollDOM: { scrollHeight: 0, clientHeight: 0 } } };
+      }
+      async loadFile(f) { this.file = f; }
+      async save() {}
+    };
+  }
+
+  v.cfgSet("手动顺序", null);
+  v.cfgSet("编辑浮层字号", null);
+  v.sig = null;
+  v.repaint(true);
+  const cardE = v.listEl.querySelector(".cb-card");
+  ok(!!cardE, "（前置）有卡片可以点开");
+  const hostA = document.createElement("div");
+  hostA.className = "cb-body";
+  cardE.appendChild(hostA);
+  let mountErr = null;
+  try { await v.mountEditor(cardE, cardE.__cbEntry, hostA, null, null, null); }
+  catch (e) { mountErr = e; }
+  ok(!mountErr, "mountEditor 真跑起来不抛（" + (mountErr && mountErr.message) + "）");
+  const edPop = document.body.querySelector(".cb-ed-pop");
+  ok(!!edPop, "浮层真挂到了 document.body 上（不再早退 unsupported）");
+  const fsEl = edPop && edPop.querySelector(".cb-ed-fs");
+  ok(!!fsEl, "小标题条上有字号徽标（.cb-ed-fs）");
+  eq(fsEl && fsEl.textContent, "A 跟随", "没配字号 → 徽标写「A 跟随」");
+  eq(edPop && edPop.style.getPropertyValue("--cb-ed-fs"), "",
+    "没配字号 → **不写** --cb-ed-fs（老用户升上来观感一字不变）");
+
+  /* 按键表：Ctrl + 往上滚 = 放大。没配过 → 起点是兜底 14 → 15 */
+  const savesA = SAVES.length;
+  edPop.dispatchEvent(new W.WheelEvent("wheel", { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true }));
+  const fsWrites = SAVES.slice(savesA).filter((s) => s.key === "编辑浮层字号");
+  eq(fsWrites.length, 1, "Ctrl + 滚轮 → 恰写一次「编辑浮层字号」（只一个台面在写）");
+  eq(fsWrites[0] && fsWrites[0].val, 15, "往上滚 = 放大 1 px（起点 = 兜底 14）");
+  eq(edPop.style.getPropertyValue("--cb-ed-fs"), "15px", "🔴 真铺到浮层上：--cb-ed-fs = 15px");
+  eq(edPop.style.getPropertyValue("--font-text-size"), "15px",
+    "一并覆盖 --font-text-size（表格 / 属性 / 内嵌块跟着一起缩，不然只有正文变）");
+  eq(fsEl.textContent, "A 15", "徽标当场回显「A 15」");
+  ok(edPop.hasClass("cb-ed-zooming"), "缩放中挂 .cb-ed-zooming（松手淡出）");
+
+  /* 不按修饰键的滚轮 = 正常滚动页面，插件一个字都不许写 */
+  const savesB = SAVES.length;
+  edPop.dispatchEvent(new W.WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true }));
+  eq(SAVES.length, savesB, "不按 Ctrl/Cmd 的滚轮 → 一个字都不写（不抢普通滚动）");
+
+  /* 往下滚 = 缩小 */
+  edPop.dispatchEvent(new W.WheelEvent("wheel", { deltaY: 100, ctrlKey: true, bubbles: true, cancelable: true }));
+  eq(edPop.style.getPropertyValue("--cb-ed-fs"), "14px", "往下滚 → 缩回 14px");
+
+  /* 到顶：已在上限再往上滚 → 不写盘（别刷无谓的 .base 写） */
+  v.cfgSet("编辑浮层字号", 32);
+  v.applyEditorFont(edPop);
+  const savesC = SAVES.length;
+  edPop.dispatchEvent(new W.WheelEvent("wheel", { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true }));
+  eq(SAVES.length, savesC, "已经在上限 32 → 再往上滚不写盘（到顶就不动）");
+  eq(edPop.style.getPropertyValue("--cb-ed-fs"), "32px", "上限值就停在 32px");
+
+  /* 双击徽标 → 回「跟随主题」（给条明路，不至于找不到出口） */
+  fsEl.dispatchEvent(new W.MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+  eq(edPop.style.getPropertyValue("--cb-ed-fs"), "", "双击徽标 → 摘掉 --cb-ed-fs（回主题默认）");
+  eq(edPop.style.getPropertyValue("--font-text-size"), "", "一并摘掉 --font-text-size");
+  eq(fsEl.textContent, "A 跟随", "徽标回到「A 跟随」");
+  eq(v.editorFontSize(), null, "配置里的键也真删了（editorFontSize() = null）");
+
+  /* 面板「内容」组那一行：与滚轮**同一个键**，而且拨完不许把开着的浮层关掉 */
+  if (!v.panelOpen) click(v.rootEl.querySelector("button.cb-gear"));
+  ok(v.panelOpen, "面板打开");
+  const fsGrp = grpOf("内容");
+  const fsRow = fsGrp && wrowOf(fsGrp, "编辑浮层字号");
+  ok(!!fsRow, "「内容」组里有「编辑浮层字号」拉杆（R29 新加）");
+  const fsRg = fsRow && fsRow.querySelector("input.cb-wrange");
+  eq(fsRg && (fsRg.getAttribute("min") + "/" + fsRg.getAttribute("max")),
+    "10/32", "拉杆 10 – 32 px（与滚轮共用同一对常量）");
+  ok(!!fsRow && /跟随主题/.test(fsRow.textContent), "带「跟随主题」打勾项（勾上 = 不写覆盖）");
+  fsRg.value = "20";
+  fire(fsRg, "change");
+  eq(v.editorFontSize(), 20, "拨拉杆 → 写的是同一个键（两个台面同源，不漂）");
+  eq(edPop.style.getPropertyValue("--cb-ed-fs"), "20px",
+    "🔴 面板拨完 → 开着的浮层**当场跟着变**（不用关掉重开）");
+  eq((edPop.querySelector(".cb-ed-fs") || {}).textContent, "A 20", "浮层徽标也跟着刷成「A 20」");
+  ok(!!document.body.querySelector(".cb-ed-pop"),
+    "🔴 浮层**没被关掉**（改字号不该打断你正在编辑的那篇）");
+
+  /* 收拾现场：收起浮层 + 清键 */
+  v.unmountEditor(false);
+  ok(!document.body.querySelector(".cb-ed-pop"), "收起浮层 → 从 body 上摘干净（不留孤儿）");
+  v.cfgSet("编辑浮层字号", null);
+  v.cfgSet("手动顺序", null);
+  v.sig = null;
+  v.repaint(true);
+
   console.log("\nR20-看板DOM冒烟: PASS " + pass + " / FAIL " + fail
     + (fail ? "\n" + fails.join("\n") : ""));
   process.exit(fail ? 1 : 0);

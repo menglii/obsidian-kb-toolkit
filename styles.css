@@ -1103,6 +1103,9 @@
 /* 浮层本体：挂在 document.body 上，fixed 定位
    （.cb-root 自己在滚，挂在卡片里会被裁掉 —— 第 7 轮教训） */
 .cb-ed-pop {
+  /* R29（boss 第 2 条）：浮层字号 —— JS 只写这一个变量（浮层里 Ctrl/Cmd + 滚轮，
+     或顶栏面板「内容」组的拉杆）。没写过 = 主题小字号（= 加这条之前的行为）。 */
+  --cb-ed-fs: var(--font-ui-smaller);
   position: fixed;
   left: 50%;
   top: 50%;
@@ -1186,9 +1189,12 @@
   cursor: pointer;
 }
 
+/* R29（boss 第 2 条）：字号走变量 —— **就地改掉**原来写死的 --font-ui-smaller
+   （不是另开一条 .cb-ed-pop 覆盖：两条规则打架 = 以后改哪条都失效）。
+   变量的声明在下面那条 .cb-ed-pop 规则里，全文件只此一处。 */
 .cb-ed-pop .markdown-source-view,
 .cb-ed-pop .cm-editor {
-  font-size: var(--font-ui-smaller);
+  font-size: var(--cb-ed-fs);
 }
 
 /* 子板块里的卡片：正文收紧一点 */
@@ -1848,6 +1854,143 @@ input.cb-wrange:disabled {
 .cb-sec-allbtn:hover {
   color: var(--text-normal);
   border-color: var(--color-yellow);
+}
+
+/* ============================================================
+ * R29（boss 第 2 条）：就地编辑浮层 —— 字号徽标
+ *  徽标只回显 + 双击复位；缩放本体在 JS（写 --cb-ed-fs）
+ * ============================================================ */
+.cb-ed-fs {
+  margin-left: auto;          /* 顶到右边；下面的 ✕ 归位（原来 margin-left:auto 在它身上） */
+  flex: 0 0 auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 1px 6px;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.cb-ed-fs:hover {
+  color: var(--text-normal);
+}
+.cb-ed-pop .cb-ed-bar .cb-ed-close {
+  margin-left: 0;             /* 让上面的徽标去吃 auto 外边距 */
+}
+/* 缩放中给一下反馈（松手 380ms 淡出；只动颜色，不动尺寸 → 不引发布局抖动） */
+.cb-ed-pop.cb-ed-zooming .cb-ed-fs {
+  background-color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+/* ============================================================
+ * R29（boss 第 3 条）：手机端适配
+ *  两套：窄屏 @media(max-width:700px) + Obsidian 移动端 body.is-mobile
+ *  桌面一行都不受影响（媒体查询 / .is-mobile 都不命中）
+ * ============================================================ */
+@media (max-width: 700px) {
+  /* 工具条与板块头都允许折行：窄屏塞不下就换行，别横向溢出 */
+  .cb-bar {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .cb-section-head {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .cb-mode {
+    max-width: 100%;
+  }
+  .cb-root {
+    padding: 0 6px 48px 6px;
+  }
+
+  /* 卡片栅格：--cb-card-w 比屏还宽时不许把页面撑出横向滚动条 */
+  .cb-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(var(--cb-card-w), 100%), var(--cb-card-max, 1fr)));
+  }
+
+  /* 浮层与设置面板贴近全屏 */
+  .cb-ed-pop {
+    width: 96vw;
+    height: 86vh;
+    padding: 6px 8px;
+  }
+  .cb-panel {
+    width: 96vw;
+    height: min(90vh, 720px);
+  }
+
+  /* 跟手小窗不许长到屏幕外 —— 给上限 + 自己滚（板块菜单分组多，手机上会顶到底） */
+  .cb-ctxmenu {
+    min-width: 0;
+    max-width: 92vw;
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
+  }
+}
+
+/* Obsidian 移动端：触控目标放大到点得准；长按 550ms 呼出菜单的逻辑在 JS（R26） */
+.is-mobile .cb-ctxmenu {
+  min-width: 0;
+  max-width: 92vw;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.is-mobile .cb-ctx-item {
+  padding: 8px 12px;
+  font-size: var(--font-ui-small);
+}
+.is-mobile .cb-ctx-sep {
+  margin: 6px;
+}
+.is-mobile .cb-ed-pop {
+  width: 96vw;
+  height: 88vh;
+}
+.is-mobile .cb-panel {
+  width: 96vw;
+  height: min(92vh, 720px);
+}
+.is-mobile .cb-ed-close {
+  padding: 5px 10px;
+}
+.is-mobile .cb-ed-fs {
+  padding: 4px 8px;
+}
+.is-mobile .cb-refresh {
+  padding: 5px 10px;
+}
+.is-mobile .cb-mini {
+  min-height: 30px;
+  padding-left: 9px;
+  padding-right: 9px;
+}
+.is-mobile .cb-seg-btn {
+  min-height: 30px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.is-mobile .cb-tri {
+  width: 1.6em;
+  font-size: var(--font-ui-small);
+}
+.is-mobile .cb-section-name {
+  font-size: var(--font-ui-medium);
+}
+.is-mobile .cb-title {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+/* 触屏没有 hover：别让「悬停才出来」的提示白占位置（点开是另一条路） */
+@media (hover: none) {
+  .cb-card:hover {
+    border-color: var(--background-modifier-border);
+    box-shadow: none;
+  }
 }
 
 /* kbt.css — kb-toolkit 设置页/面板增强样式（R13 界面翻新 / R16 三标签改版 / R18 排版 v3）。

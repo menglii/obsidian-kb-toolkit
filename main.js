@@ -174,6 +174,10 @@ const K_ALL = "全部板块上限";
 const K_HIDDEN_ON = "文件隐藏显示";     // boolean；能不能在卡片上收起某篇（默认开）
 const K_HIDDEN_SHOW = "查看隐藏的文件"; // boolean；把收起来的显示出来（淡出、仍可恢复；默认关）
 const K_HIDDEN = "隐藏的文件";          // 数组：被收起来的笔记路径
+/* R29（boss 第 2 条）：就地编辑浮层里那篇笔记的字号（px）。不写 = 跟随主题
+   （原来的 --font-ui-smaller，行为一字不变）。浮层里 Ctrl/Cmd + 滚轮 就地缩放，
+   顶栏面板「内容」组也有一个同名拉杆 —— 两个台面写同一个键。 */
+const K_ED_FS = "编辑浮层字号";
 
 /* 第 6 轮：正文截断**默认关掉**（0 = 不截断）。
    正文区本来就是「限高 + 自己滚」，截断只会让人看不到全文、还多一行「已截断」提示。
@@ -193,6 +197,12 @@ const DEFAULT_ALL_CAP = 50;
 const BODY_CONCURRENCY = 2;
 /* R28：每批之间让出一帧 —— 治的是「主线程被连成一片」导致的不响应 */
 const BODY_YIELD_MS = 16;
+/* R29：浮层字号的夹取区间与步长（px）—— Ctrl+滚轮 与面板拉杆共用同一套边界 */
+const ED_FS_MIN = 10;
+const ED_FS_MAX = 32;
+const ED_FS_STEP = 1;
+/* R29：第一次缩放时量不到真实字宽（jsdom / 还没排版）就用它兜底当起点 */
+const ED_FS_DEFAULT = 14;
 
 /* 板块级 `排序` 的取值；认不出的值一律当「默认」（不报错、不改用户数据） */
 const SORT_LABEL = {
@@ -992,6 +1002,31 @@ class CreationBoardView extends BasesViewBase {
   }
   charsOf(sec) {
     return Math.max(0, Math.floor(this.optNum(K_CHARS, DEFAULT_CHARS)));
+  }
+
+  /** R29（boss 第 2 条）：就地编辑浮层的字号（px）；null = 跟随主题 */
+  editorFontSize() {
+    const v = this.cfgGet(K_ED_FS, null);
+    if (v === null || v === undefined || v === "") return null;
+    const n = Math.round(num(v, 0));
+    if (!n) return null;
+    return Math.max(ED_FS_MIN, Math.min(ED_FS_MAX, n));
+  }
+
+  /** 把字号铺到浮层上：null = 摘掉自定义变量，回落到 CSS 的主题默认（一字不变） */
+  applyEditorFont(pop) {
+    if (!pop || !pop.style || typeof pop.style.setProperty !== "function") return;
+    const fs = this.editorFontSize();
+    try {
+      if (fs === null) {
+        pop.style.removeProperty("--cb-ed-fs");
+        pop.style.removeProperty("--font-text-size");
+      } else {
+        pop.style.setProperty("--cb-ed-fs", fs + "px");
+        /* 一并覆盖原生字号变量 —— 表格 / 属性 / 内嵌块跟着一起缩，不然只有正文变了 */
+        pop.style.setProperty("--font-text-size", fs + "px");
+      }
+    } catch (e) {}
   }
   /** 板块级 `显正文` 优先；没写 → 视图默认 */
   bodyOn(sec) {
@@ -2184,7 +2219,9 @@ class CreationBoardView extends BasesViewBase {
         return;
       }
       const target = await this.uniquePath(tgtFolder, file.basename);
+      const oldPathMv = str(file.path);          /* R29：搬走后别在顺序表里留个死路径 */
       await this.app.fileManager.renameFile(file, target);
+      this.migrateManualOrderPath(oldPathMv, target);
       const oldArea = this.areaNameOf(curFolder);
       const newArea = this.areaNameOf(tgtFolder);
       if (oldArea && newArea && oldArea !== newArea) {
@@ -2286,6 +2323,40 @@ class CreationBoardView extends BasesViewBase {
       if (v && typeof v === "object" && !Array.isArray(v)) return v;
     }
     return {};
+  }
+
+  /** R29（boss 第 1 条）：**改文件名后把原来那一格保住**。
+   *  手动顺序里存的是**文件路径**（`{板块键: [路径, …]}`）；改名 / 搬文件之后旧路径失配，
+   *  `applyManualOrder()` 会把「顺序表里没点名」的条目一律甩到**最后**（那里兜底成 BIG）
+   *  —— 老板看到的就是「改完名这张卡跑到最后面去了」。
+   *  所以每次改名 / 搬文件后，把顺序表里的旧路径**就地换成新路径**（只换取值）。
+   *  🔴 只动**取值**，不动**键**：键是「数据源:路径」（板块的），跟笔记名无关，
+   *     动它反而错位（run_r24 B20 钉着这一条）。 */
+  migrateManualOrderPath(oldPath, newPath) {
+    const o = (this.manualOrder && typeof this.manualOrder === "object")
+      ? this.manualOrder : this.loadManualOrder();
+    if (!o || typeof o !== "object") return false;
+    const from = str(oldPath);
+    const to = str(newPath);
+    if (!from || !to || from === to) return false;
+    let hit = 0;
+    for (const k of Object.keys(o)) {
+      const arr = o[k];
+      if (!Array.isArray(arr)) continue;
+      for (let i = 0; i < arr.length; i++) {
+        if (str(arr[i]) === from) {
+          arr[i] = to;
+          hit += 1;
+        }
+      }
+    }
+    if (!hit) return false;
+    this.manualOrder = o;
+    this.lastOrderMigrate = { from: from, to: to, hit: hit };   // 断言 / 诊断用
+    try {
+      if (this.config && typeof this.config.set === "function") this.config.set("手动顺序", o);
+    } catch (e) {}
+    return true;
   }
 
   /** 右键菜单打开时的 Esc 监听 */
@@ -3186,7 +3257,9 @@ class CreationBoardView extends BasesViewBase {
           try { new obsidian.Notice("目录不存在，没动：" + folder); } catch (e) {}
           return;
         }
+        const oldPathPm = str(file.path);        /* R29：手动顺序里的旧路径一并迁走 */
         Promise.resolve(this.app.fileManager.renameFile(file, target)).then(() => {
+          this.migrateManualOrderPath(oldPathPm, target);
           try { new obsidian.Notice("已移动到 " + folder); } catch (e) {}
         }).catch((e2) => {
           try { new obsidian.Notice("移动失败：" + (e2 && e2.message ? e2.message : String(e2))); } catch (e) {}
@@ -3687,12 +3760,18 @@ class CreationBoardView extends BasesViewBase {
         return;
       }
       cleanup();
+      /* R29：renameFile 会**就地改掉** entry.file.path —— 先留一份旧的，
+         后面迁移「手动顺序」和记 lastRename 都要用它 */
+      const oldPath = str(entry.file.path);
       const parent = entry.file.parent ? entry.file.parent.path : "";
       const newPath = (parent ? parent + "/" : "") + nv + ".md";
-      if (newPath === entry.file.path) return;
+      if (newPath === oldPath) return;
       try {
         await this.app.fileManager.renameFile(entry.file, newPath);
-        this.lastRename = { from: entry.file.path, to: newPath };
+        /* R29（boss 第 1 条）：顺序表里的旧路径换成新路径 —— 不换这张卡会被
+           applyManualOrder 甩到板块最后面（顺序表里再也查不到它）。 */
+        this.migrateManualOrderPath(oldPath, newPath);
+        this.lastRename = { from: oldPath, to: newPath };
         this.saveState = "已改名 → " + newPath;
       } catch (e) {
         new Notice("创作看板：改名失败（" + (e && e.message ? e.message : e) + "）");
@@ -3780,6 +3859,10 @@ class CreationBoardView extends BasesViewBase {
       /* ② 小标题条：说明挂的是谁 + 一个明确的「收起」 */
       const bar = pop.createDiv({ cls: "cb-ed-bar" });
       bar.createSpan({ cls: "cb-ed-name", text: "✎ " + entry.file.basename });
+      /* R29（boss 第 2 条）：字号徽标 —— 浮层里 Ctrl/Cmd + 滚轮 就地缩放；
+         双击徽标回「跟随主题」。徽标只回显、不占地方（CSS 让它顶到右边）。 */
+      const fsBadge = bar.createSpan({ cls: "cb-ed-fs" });
+      fsBadge.setAttr("title", "按住 Ctrl / Cmd 滚轮可缩放字号；双击这里回「跟随主题」");
       const x = bar.createEl("button", { cls: "cb-ed-close", text: "✕ 收起" });
       x.setAttr("title", "收起编辑器（按 Esc 也行）");
       x.addEventListener("mousedown", (evt) => {
@@ -3799,6 +3882,60 @@ class CreationBoardView extends BasesViewBase {
 
       if (this.editorProps) pop.addClass("cb-hidepros");   // 卡片上已有属性 → 浮层里那份不再重复显示
       host.addClass("is-editing");
+
+      /* ③¾ R29（boss 第 2 条）：字号 —— 先按配置铺一遍，再挂 Ctrl/Cmd + 滚轮 的就地缩放 */
+      const paintEdFs = () => {
+        const fs = this.editorFontSize();
+        const t = fs === null ? "A 跟随" : "A " + fs;
+        if (typeof fsBadge.setText === "function") fsBadge.setText(t);
+        else fsBadge.textContent = t;
+      };
+      const bumpEdFs = (dir) => {
+        let base = this.editorFontSize();
+        if (base === null) {
+          /* 第一次缩放：量一次浮层里真实的字宽当起点，免得从兜底值突然跳一下 */
+          base = ED_FS_DEFAULT;
+          try {
+            const cv = view.containerEl && view.containerEl.querySelector
+              ? view.containerEl.querySelector(".cm-content, .markdown-source-view, .markdown-preview-view")
+              : null;
+            if (cv && typeof window !== "undefined" && window.getComputedStyle) {
+              const px = parseFloat(window.getComputedStyle(cv).fontSize);
+              if (isFinite(px) && px > 0) base = Math.round(px);
+            }
+          } catch (e) {}
+        }
+        const next = Math.max(ED_FS_MIN, Math.min(ED_FS_MAX, base + dir * ED_FS_STEP));
+        if (next === this.editorFontSize()) return;      /* 到顶/到底就不写了，别刷无谓的盘 */
+        this.cfgSet(K_ED_FS, next);
+        this.applyEditorFont(pop);
+        paintEdFs();
+        pop.addClass("cb-ed-zooming");                   /* 缩放中给个轻微反馈，松手淡出 */
+        try {
+          if (pop.__cbZoomT) clearTimeout(pop.__cbZoomT);
+          pop.__cbZoomT = setTimeout(() => {
+            try { pop.removeClass("cb-ed-zooming"); } catch (e) {}
+          }, 380);
+        } catch (e) {}
+      };
+      this.applyEditorFont(pop);
+      paintEdFs();
+      pop.__cbPaintFs = paintEdFs;                       /* 面板改字号时也刷新这枚徽标 */
+      /* Ctrl/Cmd + 滚轮：只在浮层里生效（Obsidian 自己的缩放是 Ctrl+= / Ctrl+-，不冲突） */
+      pop.addEventListener("wheel", (evt) => {
+        if (!(evt.ctrlKey || evt.metaKey)) return;
+        evt.preventDefault();
+        evt.stopPropagation();
+        bumpEdFs(evt.deltaY < 0 ? 1 : -1);
+      }, { passive: false });
+      /* 双击徽标 → 回「跟随主题」（给条明路，不至于找不到出口） */
+      fsBadge.addEventListener("dblclick", (evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        this.cfgSet(K_ED_FS, null);
+        this.applyEditorFont(pop);
+        paintEdFs();
+      });
 
       /* ③½ 第 10 轮：浮层**在点击位置附近**弹出（中心=点击点，clamp 在视口内）；
             坐标推不出（jsdom / 键盘触发）→ 保持样式里的居中不动 */
@@ -4366,6 +4503,8 @@ class CreationBoardView extends BasesViewBase {
     if (this.gapOf() !== null) view[K_GAP] = this.gapOf();
     if (this.cardHeightDefault() !== null) view[K_CARD_H] = this.cardHeightDefault();
     view[K_HIDE_EMPTY] = this.optBool(K_HIDE_EMPTY, false);
+    /* R29：跟 gap / cardH / all 同一套纪律 —— 没拨过就别把默认固化进 .base */
+    if (this.editorFontSize() !== null) view[K_ED_FS] = this.editorFontSize();
     return JSON.stringify({ _版本: 4, 视图: view, 板块: this.secs.map(sectionToRaw) }, null, 2);
   }
 
@@ -4484,6 +4623,7 @@ class CreationBoardView extends BasesViewBase {
       kinds[K_HIDDEN_ON] = "bool"; kinds[K_HIDDEN_SHOW] = "bool"; kinds[K_HIDDEN] = "raw";
       /* R27：跟导出对称 —— 少了这三行，搬进来的配置会被静默丢掉 */
       kinds[K_GAP] = "num"; kinds[K_CARD_H] = "num"; kinds[K_HIDE_EMPTY] = "bool";
+      kinds[K_ED_FS] = "num";   // R29：跟导出对称，少了这行搬进来的字号会被静默丢掉
       for (const k of Object.keys(view)) {
         const kind = kinds[k];
         if (!kind) continue;
@@ -4559,6 +4699,7 @@ class CreationBoardView extends BasesViewBase {
     const contentBox = this.addGroup("内容");
     this.addPropsRow(contentBox);
     this.addCharsRow(contentBox);
+    this.addEditorFontRow(contentBox);   // R29（boss 第 2 条）：就地编辑浮层的字号
 
     const secBox = this.addGroup("板块");
     /* R27：板块多的时候，一键全收 / 全开（跟右键菜单第 4 条同一个主题） */
@@ -4836,6 +4977,51 @@ class CreationBoardView extends BasesViewBase {
       this.saveState = v <= 0 ? "正文上限 → 不截断" : "正文上限 → " + v + " 字";
       this.repaint(false);
     });
+  }
+
+  /** R29（boss 第 2 条）：就地编辑浮层的字号（K_ED_FS）—— 「跟随主题」勾上 = 不写覆盖。
+   *  浮层里 Ctrl/Cmd + 滚轮 拨的就是这一项（两个台面写同一个键）。 */
+  addEditorFontRow(parent) {
+    const isFollow = () => this.editorFontSize() === null;
+    const cur = this.editorFontSize();
+    const r = this._sliderRow(parent, "编辑浮层字号",
+      "点开一篇笔记时那个悬浮小窗的字号（" + ED_FS_MIN + " – " + ED_FS_MAX + " px）；浮层里 Ctrl/Cmd + 滚轮 也能拨",
+      ED_FS_MIN, ED_FS_MAX, 1, cur === null ? ED_FS_DEFAULT : cur, (v) => v + " px");
+    const sw = r.row.createEl("label", { cls: "checkbox-container" });
+    const cb = sw.createEl("input", { cls: "cb-opt-box", type: "checkbox" });
+    cb.checked = isFollow();
+    sw.setAttr("title", "跟随主题 = 不写覆盖，用 Obsidian 主题给的小字号");
+    const lab = r.row.createEl("label", { cls: "cb-opt-label", text: "跟随主题" });
+    const paint = () => {
+      r.paint();
+      const f = isFollow();
+      r.rg.disabled = f;
+      r.val.style.opacity = f ? "0.4" : "1";
+    };
+    const face = () => { cb.checked = isFollow(); paint(); };
+    const commit = (v) => {
+      if (v === null) this.cfgSet(K_ED_FS, null);
+      else this.cfgSet(K_ED_FS, Math.max(ED_FS_MIN, Math.min(ED_FS_MAX, Math.round(v))));
+      this.saveState = v === null ? "编辑浮层字号 → 跟随主题" : "编辑浮层字号 → " + v + " px";
+      /* 浮层是独立挂在 body 上的，不在面板的重绘范围里 → 开着就当场刷它（字号 + 徽标）。
+         🔴 这里**故意不 repaint**：repaint → renderBoard → unmountEditor(false) 会把老板
+            正开着的那个浮层直接收掉 —— 那这条「当场刷」就没意义了。字号只影响浮层本身，
+            看板那层没有任何东西要吃它，不重画也不会留脏。 */
+      try {
+        const ed = this.editorHost && this.editorHost.__cbEditor;
+        if (ed && ed.pop) {
+          this.applyEditorFont(ed.pop);
+          if (typeof ed.pop.__cbPaintFs === "function") ed.pop.__cbPaintFs();
+        }
+      } catch (e) {}
+      face();
+    };
+    r.rg.addEventListener("input", () => { if (isFollow()) return; r.paint(); });
+    r.rg.addEventListener("change", () => commit(r.read()));
+    const flip = () => commit(isFollow() ? r.read() : null);
+    cb.addEventListener("change", flip);
+    lab.addEventListener("click", () => { cb.checked = !cb.checked; flip(); });
+    paint();
   }
 
   /** R27：显示属性（K_PROPS）—— 逗号分隔；留空 = 每篇前言前 5 个（原键，从原生视图选项搬来） */

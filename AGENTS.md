@@ -59,10 +59,15 @@ NODE="C:/Users/wwwzh/.workbuddy/binaries/node/versions/22.22.2-3/node.exe"
 export NODE_PATH="C:/Users/wwwzh/.workbuddy/binaries/node/workspace/node_modules"
 cd .obsidian/plugins/kb-toolkit
 "$NODE" scripts/build.js
-"$NODE" tests/run_all.js 3   # r1~r27 共 2226 断言 / 失败 0（×3 遍稳定）
-# 旧套件回归（原件未动应恒绿）：
-"$NODE" ../../../.workbuddy/tmp/verify_creation_board.js   # 729/729
+"$NODE" tests/run_all.js 3   # r1~r29 共 2468 断言 / 失败 0（×3 遍稳定 = 7404）
+# 旧套件回归：
+# ⚠️ verify_creation_board 跑的是**冻结基线**（.obsidian/plugins/creation-board 已退役 → 改读
+#    .workbuddy/backup/retired-plugins-2026-09-19/creation-board），**断言是照着当时在跑的版本写的**，
+#    与冻结快照已经漂了 —— 当前恒为 717/12（视图选项数 9→10、属性默认展开等），**与本轮改动无关**。
+"$NODE" ../../../.workbuddy/tmp/verify_creation_board.js   # 717/12（既有漂移，非回归）
 "$NODE" ../../../.workbuddy/tmp/verify_bases_preview.js    # 45/45
+# 真引擎几何 + 像素（改了只有 CSS 说得清的外观就必须重跑）：
+python tmp/render_r29.py && python tmp/check_r29_shots.py  # 92/0 + 33/0
 # 沙盒真文件演练（重建执行/回滚必须过这一关）：
 "$NODE" ../../../.workbuddy/tmp/sandbox_r4b/run.js          # 229/229（七场景 × 两遍）
 # 实验库副本上再演一遍（R9 起；先用 Python 把库拷进工作区，node 读不了库外路径）：
@@ -282,6 +287,24 @@ python .workbuddy/tmp/sync_plugin_to_sandbox.py
     若 108/0 就是环境。`run_r5` 的 `catch` 已加注释说明；`run_all` 失败时会打原始输出尾部（方便一眼看出
     是「无法解析」还是真断言红）。**凡要跑 `run_all` / 示例库生成器，一律关沙箱。**
 
+69. 🔴🔴 **几何/像素 harness 的「视口」和「页面」都必须唯一确定，probe 与截图不许有任何差别（R29 立，铁律 59 的操作细则）**：
+    本轮想量「手机 390px」和「浮层徽标边框」，连栽三次，全是同一类错：
+    - **`--dump-dom` 与 `--screenshot` 的视口不一样**（实测 dump-dom = 1058×702、截图 = 1080×800）。
+      `position: fixed` 的浮层按视口居中 → 两边错开十几像素 → 拿 probe 的 bbox 去截图上量，**量的根本不是那个元素**。
+      → 正解：**视口一律由 CDP `Emulation.setDeviceMetricsOverride` 定点**（桌面也走），
+        截图与取数同一个会话、同一个视口。`tmp/geo_r29_mobile.js` 是零依赖驱动（Node 22 自带 WebSocket，不用 puppeteer）。
+    - **headless 窗口有 500 CSS px 地板**：`--window-size=390,844` 实测拿到 500；`--force-device-scale-factor` 也换不来。
+      且 CDP `mobile:true` 下页面**必须带 `<meta name="viewport" content="width=device-width">`**，否则布局宽 = 980 默认值。
+    - **probe / px / shot 三种页面必须字节相同**。第一版 probe 页多开了一个 `.cb-ctxmenu`、px 页又藏了 panel —— 布局一动，坐标全废。
+      正解：差异只允许用 **`visibility:hidden`**（仍然布局 → `getComputedStyle` / `getBoundingClientRect` 照样准，只是不画），
+      或者干脆三页同一份内容；**要给人看的图另开一个 `deliver` 模式**。
+    - **背景色一律取「全图底色众数」**，别在目标旁边取一点当参考 —— 旁边可能就是另一个元素（行号槽、面板边框），
+      整行都会被算成「有墨」。自校准、不写死 RGB。
+    - **行内墨迹高度用 `pad=1~2` 扫**：`.cm-line` 是相邻行，pad 放宽就吃到下一行；pad 硬切（`int()` 截 bbox）又会切掉头尾。
+      校准点：**墨高 ≈ 字号**（12px → 12 行、22px → 22 行）。
+    - **「换行」不要用「墨带条数」判**：窄屏工具条三行之间只有 4px row-gap，文字盒几乎挨着，数出来永远是 1 条带。
+      改成比**墨迹纵向跨度**（40 → 85 行 ≈ 2.1×）—— 这才是「内容真的占了更多行高」。
+
 
 | 轮次 | 状态 | 内容 |
 |---|---|---|
@@ -315,6 +338,7 @@ python .workbuddy/tmp/sync_plugin_to_sandbox.py
 | R27 | ✅ 完成（待真机验收 5 条） | **老板五条**：①右键菜单「显示帮助」展开后**一条一行**（`.cb-sec-help{white-space:pre-line}`）②右键新建文件后新卡片**描边闪一下**（`flashNewCard()`，`.cb-flash` 只动 `border-color`/`box-shadow` 走 `@keyframes cb-flash-ring`，**尺寸零变化**）③菜单里改设置**不关窗**（统一走 `itemStay()`，就地重画 + 顶上一条回执行回执）④「刷新」下面加**「收起/展开本板块」**（按当前态换文案）⑤**全体面板填空**（`renderPanel` 三段→四段：窗头下加**摘要条**；新开「**内容**」组把属性/正文默认展开从原生视图选项搬来；「卡片」组补**网格间距**`K_GAP` + **卡片默认高度**`K_CARD_H`；「板块」组加**一键全收**`.cb-bulk` + 每行「**已自定义**」淡紫徽标`.cb-badge-ovr`；另加「隐藏空板块」`K_HIDE_EMPTY`；`getViewOptions` 只剩 `K_BODY` 一条）。🔴 **自查出 4 个「全绿但不生效」**：⑤① 回执写 `saveState` 被 `persist()` 覆写 → 新开 `note()` 专用通道（→ 铁律 64）⑤② `refreshSecMenu()` 按下标写 `sections[a.si]` 错位（`sections` ≠ `secs`）→ 按 `srcIndex` 找（→ 铁律 65）⑤③ 配置搬运漏 `K_GAP`/`K_CARD_H`/`K_HIDE_EMPTY` 三键（导出再导入静默丢设置）⑤④ 回执行不封顶把菜单从 232 顶到 **246** → `max-width:200px`⑤⑤ **帮助开 `pre-line` 后「最长那一行」成了菜单 max-content 的新驱动者** → 不封顶时菜单从 232 被撑到 **278** → `.cb-sec-help{max-width:200px}`（铁律 60 的新面孔，新断言当场抓到）。🔴 **几何层抓到 harness 雷**：`px_panel` 用 `#board{display:none}` 把面板一起藏了（面板是 `.cb-root` 直接子元素）→ 那张隔离页是空白（→ 铁律 66）。（+176 = **2226**/轮，三连轮 **6678** 全绿；新增 `run_r27.js` **125**；`run_r20b` 248→**298**；真引擎**几何 62 + 像素 68**；R22 76 / R24 44+8 / R25 110+12 / R26 55+19 复跑全绿；沙盒 229 + 真库副本 247 + 独立套件 45 全绿；构建 main.js **561,105 B** / styles.css **69,810 B**） |
 | R28 | ✅ 完成（待真机验收 2 条） | **老板报障**：「删光板块后兜底『全部』看板把整个库拖卡，各类操作都变卡甚至不响应」。**根因 = 两层叠加，缺一不成灾**：① `buildSections()` 兜底「全部」分支**没有 limit** —— 未配置板块时 `return { entries: all }`，**全库 N 篇一次性全渲**，绕开普通板块的默认 50 条上限与 totalCap；② 卡片正文走真 `MarkdownRenderer.render`，正文含 ` ```base ` 的 MOC **各起一个独立 Bases 引擎** → 滚到哪起一串 → 叠加冻主线程。**修复**（均按老板 prior 拍板）：① 兜底加 `DEFAULT_ALL_CAP=50` + 视图键 `K_ALL`（`null`=跟随插件 `allCap`，`0`=不限），`allCappedCount` 如实记账；板块头写 `shown/total 条`，工具条报「超上限截断 N 篇」，右侧给「**显示全部 N 篇（慎用）**」药丸 `.cb-sec-allbtn`（点 `cfgSet(K_ALL,0)` 真放开 → 文案变「恢复上限 50 篇」，再点回默认；只读视图不给）② `pumpBody()` 重写为**限并发 `BODY_CONCURRENCY=2` + 批间 `bodyYield()` 让帧**（`setTimeout` 非 rAF），单篇挪进 `runBodyJob()` 带 `try/catch`（**出错也推 done**，队列不卡）③ `K_ALL` 进 `computeSig()`（铁律 56）+ 进 `export/import` + 设置页加「性能护栏 · 全部板块上限」（`loadSettings` 归一）。🔴 **立两条铁律**：兜底分支必须与普通分支同口径（带 limit / 并发上限 `Math.max(1,…)` 防活锁）（→ 铁律 67）；沙箱注入 `node-safe-delete-shim` **拦 `fs.rmSync`** → `run_r5` J 段崩成 `PASS 103/FAIL 1`（**非代码回归**），全量回归须 `dangerouslyDisableSandbox`（→ 铁律 68）。（+111 = **2337**/轮，三连轮 **7011** 全绿；新增 `run_r28.js` **69**；`run_r20b` 298→**340**；真引擎**几何 49 + 像素 24**；独立 45 + 沙盒 229 + 真库副本 247 全绿；构建 main.js **568,083 B** / styles.css **70,862 B**） |
 | R9 | ✅ 完成（待真机验收 6 条） | **①视图注册走真生命周期**（`inst.load()/unload()` + 注册前 deregisterView；修「拨开关弹同名视图」）+ **②文件位置搬运与重建解耦**（只开 ② 就能用）+ **③静默窗口**（`services/quiet`，重建/回滚期间 ② 整条让路；修第 5/6/7 条回滚被抢文件）+ **④幂等搬运照样写可逆日志**（修「缺件」）+ **⑤journal 继承**（同一轮重跑不丢 `mkdirOld`，修空目录残渣）+ **⑥空目录补删** `sweepEmptyDirs` + **⑦属性默认展开**（看板卡片与浮层）+ **⑧报告如实对账**（真搬成排除 preexisting；收容表 from≠to）（828→835 断言；r5 收口 excluded 4 条；沙盒 171→229，新增 sc7；另加真库副本 sc8 = +18） |
+| R29 | ✅ 完成（待真机验收 3 条） | **老板三条**：①**改名保位**（根因：手动顺序存的是**文件路径**，`renameFile` 换路径后该条目在顺序表里"失联"，`applyManualOrder()` 兜底 `BIG` 把它甩到最末。修法：`beginRename` 在 `renameFile` **之前**留旧路径 — 它是**就地改** `entry.file.path` 的 — 改名/搬目录后 `migrateManualOrderPath(old,new)` 只换**取值**不动**键**（键是「数据源:路径」，run_r24 B20 守着）；三个改名入口全接上）②**浮层字号 Ctrl/Cmd+滚轮**（新视图键 `K_ED_FS` 10–32px，`null`=跟随主题；CSS 把写死的 `--font-ui-smaller` **就地改成** `var(--cb-ed-fs)` 并在**原规则**里声明初值；`passive:false` 才能 preventDefault；不按修饰键照旧滚页面；标题条 **`A 跟随` 徽标**回显 + 双击复位；一并覆盖 `--font-text-size` 让表格/属性/内嵌块一起缩；面板「内容」组同名拉杆与滚轮**同一个键**；导出只带显式设过的值。🔴 **顺带修自相矛盾**：面板 commit 里 `repaint(false)` → `renderBoard` → `unmountEditor(false)` 会把老板正开着的浮层收掉 → 这条**故意不 repaint**）③**手机端适配**（`@media (max-width:700px)`：工具条/板块头 `flex-wrap`、`.cb-root` 左右 6px、栅格 `minmax(min(var(--cb-card-w),100%),…)`、浮层/面板 `96vw`、跟手小窗 `92vw` + `calc(100vh-16px)` + 自己滚；`.is-mobile`：菜单项 `8px 12px`、`.cb-mini`/`.cb-seg-btn` `min-height:30px`、✕/徽标内边距、三角 `1.6em`、板块名 `--font-ui-medium`；`@media (hover:none)` 卡片悬停复位；🔴 桌面 1080px 对照组一条都不命中）。🔴 **harness 连栽三次** → 立铁律 69（视口必须由 CDP 定点、probe/px/shot 必须字节相同、headless 500px 地板 + viewport meta、底色取全图众数、行墨高 ≈ 字号、换行看**跨度**不看墨带数）。（+131 = **2468**/轮，三连轮 **7404** 全绿；新增 `run_r29.js` **85**；`run_r20b` 340→**386**（真 `mountEditor` + 真 `renameFile` 反证）；真引擎**几何 92 + 像素 33**；bases-preview 45 + 沙盒 229 + 真库副本 247 全绿；构建 main.js **577,991 B** / styles.css **75,031 B**） |
 
 **待 boss 真机验收**：
 - ①→②→③ 三个关口（重建真执行+回滚 / 笔记自动化切换 / 双视图打开）+ 首次向导首次弹出体验（R4b/R5 遗留）。
@@ -332,6 +356,7 @@ python .workbuddy/tmp/sync_plugin_to_sandbox.py
 - **R20 四条（第九轮报的）**：① 设置页每个模块的「当前状态」是不是只剩「已启用 / 未启用」一行（点整栏或 ⓘ 仍能开悬浮窗看细节）；② 顶部标签行右端是不是「日志 / 关于 / 帮助」三个按钮、页内底部不再有「帮助」栏、点「帮助」开的是**当前这一页**的小窗；③ 看板工具条上的「⚙ 板块」与板块标题旁的齿轮是不是**自绘的线条图标**（跟文字同色、不再是淡紫 emoji）；④ 看板三个设置入口的分工 —— 点**看板标题**进的视图选项是否只剩显示类几项；点**顶栏齿轮**是否看到「看板行为 / 板块 / 高级」三段、开关是胶囊样式、解释文字悬停才出；点**板块标题齿轮**是否看到「继承 / 开 / 关」三个并排按钮而不是下拉。
 - **R27 五条（本轮报的）**：① 右键板块名 → 「通用设置 → **显示帮助**」展开后说明是否**一条一行**（不再挤成一坨）；② 右键 → 「新建文件」建出的新卡片是否**描了一圈边再淡出**（≈1.6 秒，且卡片宽高/位置**不跳**）；③ 在菜单里改任意一项（如「内容展开」）—— 窗是否**不关**、就地刷新、顶上多出**一行回执**写着刚改了什么；④ 「刷新」下面是否多了一项「**收起本板块**」（本板块收起后它会变成「展开本板块」）；⑤ 点**顶栏齿轮**看面板：窗头下是否多一条**摘要**、是否新开「**内容**」组（属性/正文默认展开）、「卡片」组有没有**网格间距**与**卡片默认高度**、「板块」组底下有没有**一键全收**、被单独改过的行有没有「**已自定义**」淡紫小标。顺带：视图标题里原来的「属性默认展开 / 显正文」两项**已经不在了**（搬进顶栏面板了，别以为弄丢了）。
 - **R28 两条（本轮报的）**：① 打开一个**没配置任何板块的看板**（或把板块**全删光**）→ 看兜底「**全部**」那一块：是否**只渲 50 条**、板块头是否写「**50 / N 条**」、旁边是不是有个「**显示全部 N 篇（慎用）**」的小按钮；**点它**是否当场放开到全部（按钮变成「恢复上限 50 篇」）、**再点**是否回到 50 条。② 滚到**正文里含 ` ```base ` 的 MOC** 卡片，看是否**不再一次冻住 Obsidian**（后台最多同时起 2 个 Bases 引擎、批间让帧；观感上就是"能顺畅滚过去"）。
+- **R29 三条（本轮报的）**：① 在看板里把一张卡片的**文件名改掉**（单击标题就改）—— 改完它是否**还在原来那一格**（不会掉到板块最下面）；把卡片**拖到别的目录**也一样。② 点开一篇笔记（悬浮小窗编辑态）→ 按住 **Ctrl / Cmd + 滚轮** 看字号是否**当场变大/变小**（标题条右边那枚 **`A 跟随`** 徽标会跟着变成 `A 15` 之类）；**双击那枚徽标**是否回到「跟随主题」。顶栏齿轮 →「内容」组最下面那行「**编辑浮层字号**」拨一下，看开着的那个浮层是否**当场跟着变**（且**不会被关掉**）。③ **手机**上打开这个看板：工具条是否**换行**不横向溢出、卡片是否**铺满屏宽**（不再固定 240px 撑出横向滚动条）、点开笔记的浮层是否**接近全屏**、长按呼出的菜单是否**每条都够大点得准**、跟手小窗太高时是否能**自己滚**。
 - **实验库现状**（`C:\Users\wwwzh\OneDrive\Desktop\插件实验`）：**R23 收尾已同步**（SYNC-OK bad=0）。顶层：`01_111/`（老板重建产物）+ `旧文件/` + `操作说明.md` + `未命名.base`。插件目录：`kb-toolkit/` = main.js(504918) + styles.css(57841) + manifest/versions（与主库构建 sha256 一致）；旧 `creation-board/` 幽灵目录已再次进回收站（R12 构建不再往那里写 data.json，不会复活；内嵌桥改落 `kb-toolkit/embed-creation-board/`）。
 
 ## 决策记录（为什么是这样）
