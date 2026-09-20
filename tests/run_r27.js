@@ -202,6 +202,12 @@ ok(/^ *"「" \+ secName \+ "」　数据源 "/m.test(cbRaw), "C3：第一行仍�
 ok(hb.indexOf("· ") >= 0, "C4：每行以「·」起头（pre-line 之下看得出层级）");
 ok(/\.cb-sec-help \{[\s\S]{0,80}?white-space: pre-line;/.test(cssRaw),
   "C5：🔴 CSS 侧给了 white-space: pre-line —— 没有它 \\n 根本不换行（改了等于没改）");
+/* C5b（真引擎几何抓到的回归）：开了 pre-line 之后「最长那一行」成了菜单 max-content 的新
+   驱动者 —— 不封顶时菜单从 232 被撑到 278（老板认可的那个窄窗胖了）。必须给 max-width。 */
+ok(/\.cb-sec-help \{[\s\S]{0,200}?max-width: \d+px;/.test(cssRaw),
+  "C5b：🔴 说明块必须 max-width 封顶（铁律 60：菜单宽 = 最宽子行 max-content，不封顶就撑胖窄窗）");
+ok(!/\.cb-sec-help \{[\s\S]{0,200}?max-width: (2[4-9]\d|[3-9]\d\d)px;/.test(cssRaw),
+  "C5c：封顶值要小于既有最宽行（219.2），别写 240+ 等于没封");
 
 console.log("\n== R27 · 新建文件后描边闪一下（boss 第 2 条） ==");
 

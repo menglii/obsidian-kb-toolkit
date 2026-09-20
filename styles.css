@@ -1627,11 +1627,15 @@ input.cb-wrange:disabled {
   cursor: default;
 }
 /* R27（boss 第 1 条）：帮助段落原来是**一坨流式文本**，断行位置随机、读不动。
- * 现在 JS 侧用 \n 一条一行，这里必须开 pre-line：换行生效、超长行照旧自动折行。 */
+ * 现在 JS 侧用 \n 一条一行，这里必须开 pre-line：换行生效、超长行照旧自动折行。
+ * 🔴 必须同时**封顶**：菜单是 position:fixed 且不给 width → 宽度 = 最宽子行的 max-content
+ * （铁律 60）。开了 pre-line 之后，「最长的那一行」就成了新的 max-content 驱动者 ——
+ * 实测不封顶时菜单从 232 被撑到 **278**，把老板认可的那个窄窗撑胖了。
+ * 200px 与上面的 .cb-ctx-status 同值，稳在既有最宽行 219.2 之下。 */
 .cb-sec-help {
   white-space: pre-line;
   padding: 4px 10px 8px;
-  max-width: 268px;
+  max-width: 200px;
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
   line-height: 1.6;
