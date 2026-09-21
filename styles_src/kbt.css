@@ -469,8 +469,20 @@
   .kbt-head { align-items: flex-start; flex-wrap: wrap; }
   .kbt-tabs { gap: var(--size-2-1); }
   .kbt-tab { padding: var(--size-2-2) var(--size-4-2); font-size: var(--font-ui-small); }
+  /* R30（boss 第 4 条）：日志 / 关于 / 帮助 挪到标签行**下面**、靠左 ——
+     标签行允许折行 + 三个小字按钮独占一行（flex-basis:100%），不再和标签挤一行被截断 */
+  .kbt-tabs { flex-wrap: wrap; }
+  .kbt-ghost-btns {
+    order: 2;
+    flex-basis: 100%;
+    margin-left: 0;
+    padding-left: 0;
+    justify-content: flex-start;
+  }
   .kbt-group { padding: 0; }
-  .kbt-card { padding: 2px var(--size-4-2); }
+  /* R30 第 5 条（卡片内边距）：8px → 12px，内容和白框别贴那么近
+   * （注释里别复述 run_r30 的段标记字样，否则切片边界会提前） */
+  .kbt-card { padding: 4px var(--size-4-3); }
   .kbt-ghost-btn { min-height: 34px; }
   .kbt-card button { min-height: 36px; }
   .kbt-switch .checkbox-container { width: 40px; height: 24px; border-radius: 999px; margin: 0; }
@@ -483,6 +495,20 @@
   /* 窄窗里「键 + 说明」改成两行，避免说明被挤成一条 */
   .kbt-hrow { display: block; }
   .kbt-hk { display: block; margin-bottom: 2px; }
+}
+/* R30（boss 第 5 条）：核心操作不竖排 —— 名字在左、按钮在右（同一行），
+ * 按钮不再铺满整行把名字挤到上面去。只作用于 .kbt-core-actions（预览/执行/回滚三行，
+ * 它们没有说明文字，横排放得下）；「辅助」等带说明的行保持原生竖排。
+ * 🔴 原生规则（asar 取证）：@container (max-width:400px) 里
+ *   `.setting-item:not(:is(.mod-toggle,…))` 竖排 + 按钮 width:100%，
+ *   特异性 (0,3,1)/(0,4,1) —— 这里用 body.is-mobile + 双类压过它（(0,5,x)），不用 !important。 */
+.is-mobile .kbt-sec.kbt-core-actions .setting-item { flex-direction: row; align-items: center; }
+.is-mobile .kbt-sec.kbt-core-actions .setting-item-info { flex: 1 1 auto; margin-inline-end: 0; align-self: center; }
+.is-mobile .kbt-sec.kbt-core-actions .setting-item-control { width: auto; justify-content: flex-end; }
+.is-mobile .kbt-sec.kbt-core-actions .setting-item-control button:not(.clickable-icon) {
+  width: auto;
+  max-width: 100%;
+  flex: 0 0 auto;
 }
 /* Obsidian 移动端（body.is-mobile）：触控尺寸再放宽一点 */
 .is-mobile .kbt-switch .checkbox-container { width: 42px; height: 26px; border-radius: 999px; margin: 0; }

@@ -1991,3 +1991,70 @@ input.cb-wrange:disabled {
     box-shadow: none;
   }
 }
+
+/* ============================================================
+ * R30（boss 五条，手机端）：① 面包屑只留本名 ② 原生工具条只留图标
+ *  ① body.is-phone：只藏「父目录段」（.view-header-title-parent，每段一个元素，
+ *    asar 取证 @230998：`:empty` 本身就 display:none → 末段文件名不受影响）。
+ *    只作用于看板这一片叶子（data-type="creation-board"），笔记页的路径不动。
+ *  ② asar 取证 @524236 / @526121：原生容器 <540px 只藏**其它项**的 label，
+ *    恰恰留着 views-menu 的「创作看板」和 result-count 的「344 个结果」→ 手机上
+ *    两个字样都被截成省略号。这里在手机上把它们藏掉：视图名只剩图标，计数不占位。
+ *  桌面 / 平板（is-phone 不命中）一行都不受影响。
+ * ============================================================ */
+body.is-phone .workspace-leaf-content[data-type="creation-board"] .view-header-title-parent {
+  display: none;
+}
+body.is-phone .bases-toolbar .bases-toolbar-views-menu .text-button-label {
+  display: none;
+}
+body.is-phone .bases-toolbar .bases-toolbar-result-count {
+  display: none;
+}
+
+/* ③ 工具条手机端两行排布 —— 用 **grid 模板**钉死，不赌 flex 折行算法：
+ *      第 1 行 = [✎可编辑] ……… [⚙板块][↻重载]（老板点名：可编辑靠左、板块/重载靠右）
+ *      第 2 行 = [板块配置 N 个][统计……]（长统计省略号收尾，不跟按钮抢行）
+ *    🔴 病根（flex 方案两连败的教训）：桌面 .cb-ro / .cb-gear 都自带 margin-left:auto，
+ *       且 count 的假想宽度（折行按 flex-basis 算，不看可否收缩）会把行挤乱 ——
+ *       order + auto margin 拼不出确定性布局。grid areas 一眼可读，桌面零影响。 */
+@media (max-width: 700px) {
+  .cb-bar {
+    display: grid;
+    grid-template-columns: max-content 1fr max-content max-content;
+    grid-template-areas:
+      "ro mid gear refresh"
+      "mode count count count";
+    align-items: center;
+    gap: 4px 8px;
+  }
+  .cb-ro {
+    grid-area: ro;
+    margin-left: 0;      /* 🔴 清掉桌面的 auto（不清就飘到行中间，实测 x=213） */
+    margin-right: 0;
+  }
+  .cb-gear {
+    grid-area: gear;
+    margin-left: 0;      /* 🔴 同上；「靠右」由模板里的空 1fr 列负责 */
+  }
+  .cb-refresh {
+    grid-area: refresh;
+  }
+  .cb-mode {
+    grid-area: mode;
+    justify-self: start;  /* 芯片不横向拉伸 */
+    max-width: 100%;
+  }
+  /* 长统计（排除目录挡掉 N 篇 / 超上限截断…）在手机上省略号收尾，别把按钮挤下去 */
+  .cb-count {
+    grid-area: count;
+    flex: none;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+/* 触控目标与 ↻重载 同一档（R29 给 refresh 加过 5px 10px） */
+.is-mobile .cb-ro {
+  padding: 5px 10px;
+}

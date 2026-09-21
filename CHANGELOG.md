@@ -2,6 +2,100 @@
 
 本文件记录 kb-toolkit 每个轮次的可验收交付。版本号只在收尾轮 bump。
 
+## 未发布 — R30（老板五条：手机端排版与手感专项）
+
+**老板五条**（2026-09-20，一句话原文 + 附加要求「不要影响电脑端界面，保证代码清晰度和可维护性」）：
+
+> 1. 界面上方 base 路径在手机竖屏模式下显示不全，要求只留下 base 自己的名字
+> 2. 创作看板和 344 个结果字样显示不全，要求手机端页面不够时，创作看板只留下图标，不显示文字，344 个结果字样直接不显示
+> 3. 可编辑，板块和重载图标在手机端有错位，要求可编辑图标在靠左，板块和重载图标靠右
+> 4. 插件设置界面，手机端顶部的日志，关于，帮助小字放知识库，笔记，base 按钮的下面，小字靠左显示
+> 5. 插件手机端设置界面选项小框中，以预览报告为例，生成预览报告的按钮太大，把文字挤到上面去了。而且按钮和文字靠边上的白色框框太近了，稍微保持一点距离
+
+🔴 **本轮 100% CSS**（`main.js` 一个字节都没变，构建产物仍是 577,991 B），
+五条全部**只写进手机 / 窄窗作用域**，桌面对照组一条都不命中（真引擎 1080px 逐条验过）。
+
+### ① 面包屑只留本名
+
+| 事实 | 位置 |
+| --- | --- |
+| 父目录每一段是**独立元素** `.view-header-title-parent` | asar 取证 @230998 |
+| 该元素自带 `:empty { display: none }` → 末段的**文件名**不是 parent，藏不掉也不该藏 | 同上 |
+| 手机上三段父目录把标题挤没 | 老板截图 ① |
+
+```css
+body.is-phone .workspace-leaf-content[data-type="creation-board"] .view-header-title-parent { display: none; }
+```
+
+只作用于**看板这一片叶子**（`data-type="creation-board"`），**笔记页顶上的路径照旧完整**——
+老板要的是「看板上别显示路径」，不是「全局别显示路径」。
+
+### ② 「创作看板」只留图标 / 「344 个结果」不显示
+
+asar 取证 @524236 / @526121：原生 `@container (width < 540px)` 把 `--bases-toolbar-label-display`
+设成 `none`，但**只对 `views-menu` 和 `result-count` 之外**的项生效 —— 恰恰就是老板点名的这两个
+「在别的项都收起之后，它们的文字留下来把行撑爆」。补两条：
+
+```css
+body.is-phone .bases-toolbar .bases-toolbar-views-menu .text-button-label { display: none; }
+body.is-phone .bases-toolbar .bases-toolbar-result-count { display: none; }
+```
+
+视图名**只剩图标**（切换视图还点得动），计数整条不占位。
+
+### ③ 工具条归位：✎ 靠左，⚙ / ↻ 靠右 —— 用 grid 钉死
+
+🔴 **flex 方案两连败**（详见铁律 70）：桌面 `.cb-ro` / `.cb-gear` 自带 `margin-left: auto`
+→ 手机上 ✎ 飘到行中间（实测 x=213）；`flex-wrap` 的折行按 **flex-basis 假想宽度**算，
+长统计 `.cb-count` 会把整行挤乱。改用 **`grid-template-areas` 把两行写死**：
+
+```css
+@media (max-width: 700px) {
+  .cb-bar {
+    display: grid;
+    grid-template-columns: max-content 1fr max-content max-content;
+    grid-template-areas:
+      "ro mid gear refresh"
+      "mode count count count";
+  }
+  .cb-ro  { grid-area: ro;      margin-left: 0; }   /* 🔴 清掉桌面的 auto */
+  .cb-gear{ grid-area: gear;    margin-left: 0; }   /* 「靠右」交给中间那列 1fr */
+  .cb-count{ grid-area: count; text-overflow: ellipsis; }  /* 太长就省略号，不抢行 */
+}
+```
+
+### ④ 设置页：日志 / 关于 / 帮助 换到标签行下面、靠左
+
+`.kbt-tabs` 允许折行 + 三个小字 `order: 2; flex-basis: 100%; justify-content: flex-start`。
+桌面那条 `margin-left: auto`（r18-211 立的「小字靠右」）**一行没动**，只在窄窗媒体查询里清。
+
+### ⑤ 核心操作：名字左 / 按钮右，不再铺满，内容和白框留点距离
+
+原生 `@container (max-width: 400px)`（asar 取证 @251792）让 `.setting-item` **竖排**且按钮 `width: 100%`
+—— 这就是「生成预览报告的按钮太大、把文字挤到上面」的根因。用**双类 + `body.is-mobile`** 压回去
+（特异性 (0,5,x) > 原生的 (0,3,1) / (0,4,1)，**不用 `!important`**）：
+
+```css
+.is-mobile .kbt-sec.kbt-core-actions .setting-item { flex-direction: row; align-items: center; }
+.is-mobile .kbt-sec.kbt-core-actions .setting-item-control button:not(.clickable-icon) { width: auto; }
+```
+
+🔴 **只作用于 `.kbt-core-actions`**（预览 / 执行 / 回滚三行没有说明文字，横排放得下）；
+「辅助」等**带说明文字**的行保持原生竖排 —— 一刀切横排会把说明挤没。
+卡片内边距 `8px → 12px`（内容和白框之间留一圈）。
+
+### 验证
+
+| 层 | 结果 |
+| --- | --- |
+| 全量回归 `run_all.js 3` | **7503 通过 / 0 失败**（2501 / 轮，33 套件） |
+| 新增 `run_r30.js` | **32 / 0**（五条的 CSS 规则 + 作用域 + 桌面零命中 + grid 模板文本 + `!important` 计数为 0 + 复写病自检） |
+| `run_r29.js` | 85 → **86**（D1 按铁律 49 改成量**断点值唯一**而非「出现 1 次」——R30 多写一个 700px 块，字面计数会假红） |
+| 真引擎几何层 `tmp/render_r30.py` | **41 / 0**（390×844 vs 1080×800 双视口；父目录 `display:none` 且本名还在 / label 与计数 none 且图标还在 / grid 两行、✎ 贴左、↻ 贴右、⚙↻ 成组 gap 6–16 / 小字在标签下方靠左 / 横排且按钮 < 卡片 55% / 内边距 12px vs 桌面 14px） |
+| 真引擎像素层 `tmp/check_r30_shots.py` | **23 / 0**（面包屑墨量手机 278 vs 桌面 1451 / 工具条墨迹跨度手机 30px vs 桌面 200px / 手机墨迹纵向跨度 62px vs 桌面 31px = 真换行 / 小字墨迹首行 45 > 标签末行 30 / 内容墨起点 x=11 ≥ 卡片内边距） |
+
+构建：`main.js` **577,991 B（未变，本轮纯 CSS）** / `styles.css` 75,031 → **79,575 B**。
+
 ## 未发布 — R29（老板三条：改名保位 + 浮层字号 Ctrl+滚轮 + 手机端适配）
 
 **老板三条**（2026-09-20，一句话原文）：

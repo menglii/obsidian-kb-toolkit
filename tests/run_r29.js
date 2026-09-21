@@ -215,8 +215,14 @@ ok(!/width:|height:|padding: \d+px \d+px;[\s\S]{0,40}cb-ed-zooming/.test(badgeCs
 /* ================= D. 手机端（boss 第 3 条） ================= */
 console.log("\n== R29 · 手机端适配 ==");
 
-eq(count(/@media \(max-width: 700px\)/g, cssRaw), 1,
-  "D1：窄屏断点只此一处（700px 与设置页 kbt.css 同值）");
+/* 🔴 R30 修（铁律 49：断言跟着意图走）：D1 原来数「700px 只出现一次」—— 那是 R29 当时的
+ *   副产品，真正的意图是「窄屏断点值全项目只有一种、且与设置页 kbt.css 同值」。
+ *   R30 追加第二个 700px 块（可编辑靠左）立刻被字面计数误伤。改成按值断言。 */
+const cbBps = [...cssRaw.matchAll(/@media \(max-width: (\d+)px\)/g)].map((m) => m[1]);
+eq(new Set(cbBps).size, 1,
+  "D1a：cb.css 的窄屏断点值只有一种（不许出现两套窄屏口径）");
+eq(cbBps[0] || "", "700",
+  "D1b：断点 = 700px（与设置页 kbt.css 的 @media (max-width: 700px) 同值）");
 eq(count(/@media \(hover: none\)/g, cssRaw), 1, "D2：触屏（无 hover）断点只此一处");
 ok(/\.cb-bar \{\s*\n\s*flex-wrap: wrap;/.test(mobileCss), "D3：窄屏工具条可折行（不横向溢出）");
 ok(/\.cb-section-head \{\s*\n\s*flex-wrap: wrap;/.test(mobileCss), "D4：窄屏板块头可折行");
