@@ -95,8 +95,10 @@
   user-select: none;
 }
 
-.cb-tri:hover {
-  color: var(--text-normal);
+@media (hover: hover) {
+  .cb-tri:hover {
+    color: var(--text-normal);
+  }
 }
 
 .cb-section-name {
@@ -168,10 +170,12 @@
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.cb-card:hover {
-  border-color: var(--background-modifier-border-hover);
-  /* R3b：原为裸 rgba 黑影，深色主题下压不住 → 换本体 --shadow-xs（明暗两套），保留原值兜底 */
-  box-shadow: var(--shadow-xs, 0 1px 6px rgba(0, 0, 0, 0.06));
+@media (hover: hover) {
+  .cb-card:hover {
+    border-color: var(--background-modifier-border-hover);
+    /* R3b：原为裸 rgba 黑影，深色主题下压不住 → 换本体 --shadow-xs（明暗两套），保留原值兜底 */
+    box-shadow: var(--shadow-xs, 0 1px 6px rgba(0, 0, 0, 0.06));
+  }
 }
 
 .cb-title {
@@ -185,9 +189,11 @@
   overflow-wrap: anywhere;
 }
 
-.cb-title:hover {
-  color: var(--link-color-hover);
-  text-decoration: underline;
+@media (hover: hover) {
+  .cb-title:hover {
+    color: var(--link-color-hover);
+    text-decoration: underline;
+  }
 }
 
 /* ---------- 第 9 轮：卡片属性默认折叠（顶上只留标题 + 「属性」展开钮） ---------- */
@@ -213,10 +219,12 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.cb-pros-toggle:hover {
-  color: var(--text-on-accent);
-  background: var(--interactive-accent);
-  border-color: var(--interactive-accent);
+@media (hover: hover) {
+  .cb-pros-toggle:hover {
+    color: var(--text-on-accent);
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+  }
 }
 .cb-props.cb-pros-fold {
   display: none;
@@ -244,8 +252,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cb-ctx-item:hover {
-  background-color: var(--background-modifier-hover);
+@media (hover: hover) {
+  .cb-ctx-item:hover {
+    background-color: var(--background-modifier-hover);
+  }
 }
 .cb-ctx-danger {
   color: var(--text-error);
@@ -313,8 +323,10 @@
   color: var(--text-muted);
 }
 
-.cb-sub-head:hover .cb-sub-name {
-  color: var(--text-normal);
+@media (hover: hover) {
+  .cb-sub-head:hover .cb-sub-name {
+    color: var(--text-normal);
+  }
 }
 
 .cb-sub-count {
@@ -440,6 +452,11 @@
   color: var(--text-faint);
   margin-left: auto;
   white-space: nowrap;
+  /* 🔴 R33：不截断的话，长回执会把右边的 ✕ 挤出面板外并被裁掉
+   * （flex 里 nowrap 的元素 min-content 就是整串，压不下去）。 */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cb-panel-msg.is-err {
@@ -461,9 +478,11 @@
   cursor: pointer;
 }
 
-.cb-panel-x:hover {
-  background-color: var(--background-modifier-hover);
-  color: var(--text-normal);
+@media (hover: hover) {
+  .cb-panel-x:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+  }
 }
 
 .cb-panel-body {
@@ -575,8 +594,10 @@
   background-color: var(--background-primary);
 }
 
-.cb-row:hover {
-  border-color: var(--background-modifier-border);
+@media (hover: hover) {
+  .cb-row:hover {
+    border-color: var(--background-modifier-border);
+  }
 }
 
 .cb-row.is-editing {
@@ -605,8 +626,10 @@
   flex: 0 0 auto;
 }
 
-.cb-grip:hover {
-  color: var(--text-normal);
+@media (hover: hover) {
+  .cb-grip:hover {
+    color: var(--text-normal);
+  }
 }
 
 .cb-grip:active {
@@ -753,9 +776,11 @@
   cursor: pointer;
 }
 
-.cb-seg-btn:hover {
-  background: var(--background-modifier-hover);
-  color: var(--text-normal);
+@media (hover: hover) {
+  .cb-seg-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+  }
 }
 
 .cb-seg-btn.is-on {
@@ -794,9 +819,11 @@
   white-space: nowrap;
 }
 
-.cb-tree-node:hover {
-  background-color: var(--background-modifier-hover);
-  color: var(--text-normal);
+@media (hover: hover) {
+  .cb-tree-node:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+  }
 }
 
 .cb-tree-node.is-picked {
@@ -962,9 +989,11 @@
   min-height: 1.2em;
 }
 
-.cb-prop-val:hover {
-  background-color: var(--background-modifier-hover);
-  box-shadow: 0 0 0 2px var(--background-modifier-hover);
+@media (hover: hover) {
+  .cb-prop-val:hover {
+    background-color: var(--background-modifier-hover);
+    box-shadow: 0 0 0 2px var(--background-modifier-hover);
+  }
 }
 
 .cb-prop-val.is-empty {
@@ -972,9 +1001,11 @@
   cursor: default;
 }
 
-.cb-prop-val.is-empty:hover {
-  background-color: transparent;
-  box-shadow: none;
+@media (hover: hover) {
+  .cb-prop-val.is-empty:hover {
+    background-color: transparent;
+    box-shadow: none;
+  }
 }
 
 .cb-prop-input {
@@ -1153,10 +1184,12 @@
   color: var(--text-muted);
   cursor: pointer;
 }
-.cb-ed-close:hover {
-  color: var(--text-on-accent);
-  background: var(--interactive-accent);
-  border-color: var(--interactive-accent);
+@media (hover: hover) {
+  .cb-ed-close:hover {
+    color: var(--text-on-accent);
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+  }
 }
 
 /* ② 内容盒：占满浮层剩余高度，自己上下滚（= 在浮层里滑动浏览） */
@@ -1222,10 +1255,12 @@
   flex: 0 0 auto;
 }
 
-.cb-plus:hover {
-  color: var(--text-on-accent);
-  background: var(--interactive-accent);
-  border-color: var(--interactive-accent);
+@media (hover: hover) {
+  .cb-plus:hover {
+    color: var(--text-on-accent);
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+  }
 }
 
 .cb-plus.is-off,
@@ -1234,11 +1269,13 @@
   cursor: not-allowed;
 }
 
-.cb-plus.is-off:hover,
-.cb-mini.is-off:hover {
-  color: var(--text-muted);
-  background: transparent;
-  border-color: var(--background-modifier-border);
+@media (hover: hover) {
+  .cb-plus.is-off:hover,
+  .cb-mini.is-off:hover {
+    color: var(--text-muted);
+    background: transparent;
+    border-color: var(--background-modifier-border);
+  }
 }
 
 /* ---------- 「＋」刚建好的临时卡片 / 真卡片高亮 ---------- */
@@ -1564,8 +1601,10 @@ input.cb-wrange:disabled {
   padding: 0 3px;
   margin: 0 -3px;
 }
-.cb-section-name.cb-sec-name-edit:hover {
-  background: var(--background-modifier-hover);
+@media (hover: hover) {
+  .cb-section-name.cb-sec-name-edit:hover {
+    background: var(--background-modifier-hover);
+  }
 }
 .cb-sec-rename-input {
   font: inherit;
@@ -1816,8 +1855,10 @@ input.cb-wrange:disabled {
   padding: 0 7px;
   color: var(--text-muted);
 }
-.cb-bulk .cb-mini:hover {
-  color: var(--text-normal);
+@media (hover: hover) {
+  .cb-bulk .cb-mini:hover {
+    color: var(--text-normal);
+  }
 }
 
 /* ⑤ 板块行上的「已自定义」徽标 —— 不然「重置设置」为什么亮着、
@@ -1851,9 +1892,11 @@ input.cb-wrange:disabled {
   white-space: nowrap;
 }
 
-.cb-sec-allbtn:hover {
-  color: var(--text-normal);
-  border-color: var(--color-yellow);
+@media (hover: hover) {
+  .cb-sec-allbtn:hover {
+    color: var(--text-normal);
+    border-color: var(--color-yellow);
+  }
 }
 
 /* ============================================================
@@ -1873,8 +1916,10 @@ input.cb-wrange:disabled {
   user-select: none;
   white-space: nowrap;
 }
-.cb-ed-fs:hover {
-  color: var(--text-normal);
+@media (hover: hover) {
+  .cb-ed-fs:hover {
+    color: var(--text-normal);
+  }
 }
 .cb-ed-pop .cb-ed-bar .cb-ed-close {
   margin-left: 0;             /* 让上面的徽标去吃 auto 外边距 */
@@ -2003,18 +2048,18 @@ input.cb-wrange:disabled {
   padding: 4px 8px;
 }
 .is-mobile .cb-mini {
-  min-height: 30px;
+  min-height: 34px;
   padding-left: 9px;
   padding-right: 9px;
 }
 .is-mobile .cb-seg-btn {
-  min-height: 30px;
+  min-height: 34px;
   padding-left: 10px;
   padding-right: 10px;
 }
 .is-mobile .cb-tri {
   width: 30px;          /* 🔴 R31：横向也要给够（原来 1.6em ≈ 21px） */
-  min-height: 30px;
+  min-height: 34px;
   font-size: var(--font-ui-small);
 }
 .is-mobile .cb-section-name {
@@ -2023,7 +2068,7 @@ input.cb-wrange:disabled {
 .is-mobile .cb-title {
   padding-top: 2px;
   padding-bottom: 2px;
-  min-height: 30px;     /* 🔴 R31：卡片标题是「点开笔记」的唯一入口，原来 ≈23px */
+  min-height: 34px;     /* 🔴 R31：卡片标题是「点开笔记」的唯一入口，原来 ≈23px */
 }
 
 /* 🔴🔴 R31 触控兜底（交叉评审抓出）：
@@ -2032,14 +2077,28 @@ input.cb-wrange:disabled {
  *  老板的门槛是手机端 ≥30px。改成**兜底式**（与 kbt.css 设置页同款写法）：
  *  看板内所有按钮先打 30px 底，再给特殊的补细节。
  *  🔴 只放 .is-mobile —— 窄桌面窗口不撑胖鼠标目标（桌面零影响）。 */
-.is-mobile .cb-root button,
+.is-mobile .cb-root :is(button, .cb-add-type, .checkbox-container, .cb-prop-val,
+  .cb-tree-node, .cb-grip, .cb-sec-allbtn, .cb-mini, .cb-pros-toggle),
 .is-mobile .cb-add-type {
-  min-height: 30px;
+  min-height: 34px;
+}
+/* 拉杆：轨道仍是 5px，只把热区抬到 34px
+ * （::-webkit-slider-thumb 的 margin-top 是相对轨道算的，轨道没动 → 圆心不歪） */
+.is-mobile .cb-root input.cb-wrange {
+  height: 34px;
+}
+/* 菜单里那条拉杆被 max-width: 92px 卡着，手机上放宽 */
+.is-mobile .cb-ctx-wrow .cb-wrange {
+  max-width: none;
+}
+/* 就地编辑浮层挂在 document.body 上，**不在 .cb-root 里** → 单独补一条 */
+.is-mobile .cb-ed-pop :is(button, .cb-ed-fs) {
+  min-height: 34px;
 }
 /* 写死 height 的那些（.cb-plus 是 `height: 19px`）：min-height 打不过 height */
 .is-mobile .cb-plus {
   height: auto;
-  min-height: 30px;
+  min-height: 34px;
 }
 /* ✎可编辑 / ⚙板块 / ↻重载 三颗**同档** —— R30 ③ 要的是「一眼成组」，
  * 但实测 ⚙ 只有 18px（另两颗 30），y 也不齐（12 vs 6）。
@@ -2047,7 +2106,7 @@ input.cb-wrange:disabled {
 .is-mobile .cb-ro,
 .is-mobile .cb-gear,
 .is-mobile .cb-refresh {
-  min-height: 30px;
+  min-height: 34px;
   padding: 5px 10px;
 }
 
@@ -2174,6 +2233,22 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   }
 }
 
+/* ============================================================
+ * R33：触屏**按下**反馈
+ * :hover 已经在触屏整体不生效（顶层 hover 规则全进了 @media (hover:hover)），
+ * 如果连 :active 都没有，按下去就完全没有回应 —— 尤其 ↻重载 要同步重排完才变样。
+ * 🔴 只改背景色、不碰尺寸：卡片高亮那条注释要求「绝不让卡片跳一下」。
+ * 🔴 放在 (hover: none) 里 → 桌面鼠标零命中。
+ * ============================================================ */
+@media (hover: none) {
+  .cb-root :is(button, .cb-seg-btn, .cb-mini, .cb-tree-node, .cb-prop-val,
+    .cb-ctx-item, .cb-pros-toggle, .cb-panel-x, .cb-tri):active,
+  .cb-panel .cb-row:active,
+  .cb-ed-pop button:active,
+  .cb-ctxmenu .cb-ctx-item:active {
+    background-color: var(--background-modifier-hover);
+  }
+}
 /* kbt.css — kb-toolkit 设置页/面板增强样式（R13 界面翻新 / R16 三标签改版 / R18 排版 v3）。
  * 铁律 6：不允许 var(...) 之外的裸色值；变量必须在 obsidian_vars.txt 白名单里。
  * R18（boss：照《设置页排版方案v3-交互效果图》重做显示效果）——
@@ -2225,7 +2300,11 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   cursor: var(--cursor);
   white-space: nowrap;
 }
-.kbt-tab:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+@media (hover: hover) {
+  .kbt-tab:hover {
+   background: var(--background-modifier-hover); color: var(--text-normal); 
+  }
+}
 .kbt-tab.is-active {
   color: var(--text-accent);
   font-weight: var(--font-medium);
@@ -2259,7 +2338,11 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   border-radius: var(--radius-s);
   cursor: var(--cursor);
 }
-.kbt-ghost-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+@media (hover: hover) {
+  .kbt-ghost-btn:hover {
+   background: var(--background-modifier-hover); color: var(--text-normal); 
+  }
+}
 /* 切标签只切显示，不写 hidden（hidden 留给搜索过滤） */
 .kbt-hidden { display: none; }
 
@@ -2391,7 +2474,11 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   position: relative;
   flex: none;
 }
-.kbt-info:hover { color: var(--text-normal); border-color: var(--background-modifier-border-hover); }
+@media (hover: hover) {
+  .kbt-info:hover {
+   color: var(--text-normal); border-color: var(--background-modifier-border-hover); 
+  }
+}
 .kbt-info::after {
   content: attr(data-tip);
   position: absolute;
@@ -2414,7 +2501,12 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   visibility: hidden;
   transition: opacity .12s ease;
 }
-.kbt-info:hover::after { opacity: 1; visibility: visible; }
+@media (hover: hover) {
+  .kbt-info:hover::after {
+    opacity: 1;
+    visibility: visible;
+  }
+}
 /* 手机端没有悬停 —— 提示统一走帮助小窗，不叠一层浮层 */
 @media (hover: none) { .kbt-info::after { display: none; } }
 
@@ -2431,7 +2523,11 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
 }
 .kbt-sec.kbt-status-card { cursor: var(--cursor); }
 .kbt-sec.kbt-status-card > .kbt-card { transition: background-color .15s ease; }
-.kbt-sec.kbt-status-card:hover > .kbt-card { background: var(--background-modifier-hover); }
+@media (hover: hover) {
+  .kbt-sec.kbt-status-card:hover > .kbt-card {
+   background: var(--background-modifier-hover); 
+  }
+}
 .kbt-status .kbt-status-top {
   display: flex;
   align-items: center;
@@ -2470,7 +2566,11 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   padding: var(--size-2-1) var(--size-4-2);
   cursor: var(--cursor);
 }
-.kbt-inline-btn:hover { background: var(--background-modifier-hover); }
+@media (hover: hover) {
+  .kbt-inline-btn:hover {
+   background: var(--background-modifier-hover); 
+  }
+}
 
 /* ---- 栏目：卡片外一个小标签 + 卡片本体（卡片 = 次级底色，行间一条淡分隔线） ---- */
 .kbt-sec { margin: var(--size-4-3) 0 0; }
@@ -2515,8 +2615,10 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   font-size: var(--font-ui-smaller);
   white-space: nowrap;
 }
-.kbt-card button:not(.kbt-inline-btn):not(.kbt-hint-link):not(.kbt-info):hover {
-  background: var(--background-modifier-hover);
+@media (hover: hover) {
+  .kbt-card button:not(.kbt-inline-btn):not(.kbt-hint-link):not(.kbt-info):hover {
+    background: var(--background-modifier-hover);
+  }
 }
 .kb-legacy-banner .mod-warning {
   background: var(--background-secondary);
@@ -2606,7 +2708,11 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   border-radius: var(--radius-s);
   cursor: var(--cursor);
 }
-.kbt-pop-x:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+@media (hover: hover) {
+  .kbt-pop-x:hover {
+   background: var(--background-modifier-hover); color: var(--text-normal); 
+  }
+}
 .kbt-pop-body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -2664,13 +2770,10 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
    *  手机上内容与白框的距离 = 电脑。
    * （注释里别复述 run_r30 的段标记字样，否则切片边界会提前） */
   .kbt-card { padding-top: 4px; padding-bottom: 4px; }
-  .kbt-ghost-btn { min-height: 34px; }
-  .kbt-card button { min-height: 36px; }
-  .kbt-switch .checkbox-container { width: 40px; height: 24px; border-radius: 999px; margin: 0; }
-  .kbt-switch .checkbox-container::after { width: 18px; height: 18px; top: 3px; left: 3px; border-radius: 50%; margin: 0; transform: none; }
-  .kbt-switch .checkbox-container.is-enabled::after { transform: translateX(16px); }
-  .kbt-switch .checkbox-container:has(input:checked)::after { transform: translateX(16px); }
-  .kbt-info { width: 22px; height: 22px; min-width: 22px; font-size: var(--font-ui-small); }
+  /* 🔴 R33：这几条是**控件尺寸**，已搬到下面的 `.is-mobile` 段。
+   * 原来挂 @media (max-width:700px) —— 量的是**视口宽**，手机横屏 844~932px > 700
+   * → 整块不命中，同一台设备上看板吃着 .is-mobile 兜底、设置页却退回桌面小尺寸。
+   * 搬走后：手机横竖屏一致，桌面窄窗不再被撑胖鼠标目标（方向也对）。 */
   .kbt-pop-win { width: 94vw; max-height: 76vh; }
   .kbt-pop-body { padding: var(--size-4-2); }
   /* 窄窗里「键 + 说明」改成两行，避免说明被挤成一条 */
@@ -2705,6 +2808,31 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
 .is-mobile .kbt-tab { padding: var(--size-2-2) var(--size-4-2); }
 .is-mobile .kbt-pop-win { width: 96vw; max-height: 80vh; }
 
+/* ============================================================
+ * R33：设置页触控尺寸 —— 从 @media(max-width:700px) 搬到这里
+ * 门控统一用 body.is-mobile（与 cb.css 看板同口径），不再按视口宽。
+ * 🔴 手机端触控下限 = 34px，三个文件必须同值（cb.css 看板 / kbt.css 设置页 / ns.css 内容流）；
+ *    tests/run_r33.js 有断言盯着这三处，改一个不全会假红。
+ * ============================================================ */
+.is-mobile .kbt-ghost-btn { min-height: 34px; }
+.is-mobile .kbt-card button { min-height: 34px; }
+.is-mobile .kbt-switch .checkbox-container { width: 40px; height: 24px; border-radius: 999px; margin: 0; }
+.is-mobile .kbt-switch .checkbox-container::after { width: 18px; height: 18px; top: 3px; left: 3px; border-radius: 50%; margin: 0; transform: none; }
+.is-mobile .kbt-switch .checkbox-container.is-enabled::after { transform: translateX(16px); }
+.is-mobile .kbt-switch .checkbox-container:has(input:checked)::after { transform: translateX(16px); }
+.is-mobile .kbt-info { width: 24px; height: 24px; min-width: 24px; }
+
+/* 触屏按下反馈（同 cb.css 那套：只改背景色、只给触屏） */
+@media (hover: none) {
+  .kbt-tab:active,
+  .kbt-ghost-btn:active,
+  .kbt-inline-btn:active,
+  .kbt-pop-x:active,
+  .kbt-card button:active,
+  .kbt-hint-link:active {
+    background-color: var(--background-modifier-hover);
+  }
+}
 /* ============================================================
  * bases-preview — 「📖 笔记内容流」视图样式
  * 全部用 Obsidian 主题变量，明暗主题自动适配
@@ -2776,10 +2904,12 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.bns-item:hover {
-  border-color: var(--background-modifier-border-hover);
-  /* R3b：同 cb.css —— 本体阴影变量 + 原值兜底 */
-  box-shadow: var(--shadow-xs, 0 1px 6px rgba(0, 0, 0, 0.06));
+@media (hover: hover) {
+  .bns-item:hover {
+    border-color: var(--background-modifier-border-hover);
+    /* R3b：同 cb.css —— 本体阴影变量 + 原值兜底 */
+    box-shadow: var(--shadow-xs, 0 1px 6px rgba(0, 0, 0, 0.06));
+  }
 }
 
 .bns-head {
@@ -2800,9 +2930,11 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   border: none;
 }
 
-.bns-title:hover {
-  color: var(--link-color-hover);
-  text-decoration: underline;
+@media (hover: hover) {
+  .bns-title:hover {
+    color: var(--link-color-hover);
+    text-decoration: underline;
+  }
 }
 
 .bns-chip {
@@ -2942,4 +3074,28 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
   background: transparent;
   border-style: dashed;
   color: var(--text-faint);
+}
+
+/* ============================================================
+ * R33：内容流**此前零手机端适配** —— ns.css 里 .is-mobile 与 @media(hover:none)
+ * 一条都没有（看板做了 R29~R32 四轮，内容流一次没跟）。
+ * 触控下限同样 34px（与 cb.css / kbt.css 同值，run_r33.js 有断言）。
+ * ============================================================ */
+.is-mobile .bns-bar :is(button, .bns-refresh) {
+  min-height: 34px;
+}
+.is-mobile .bns-refresh {
+  padding: 6px 10px;        /* 原来 2px 8px ≈ 20px 高 */
+}
+/* .bns-title 是行内 <a>，抬 min-height 必须换成 inline-flex，否则不吃高度 */
+.is-mobile .bns-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+}
+
+@media (hover: none) {
+  .bns-bar :is(button, .bns-refresh):active {
+    background-color: var(--background-modifier-hover);
+  }
 }

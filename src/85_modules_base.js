@@ -121,7 +121,7 @@ KB.define("modules/base", function () {
    *     ③ z-index 30 < 遮罩 40 < 菜单 100：vendor 长按菜单出来会盖住它，不打架；
    *     ④ 桌面（有 hover）**压根不装**，零监听器、零开销。
    * ============================================================ */
-  var TIP_SCOPE = ".cb-root, .cb-panel, .cb-ed-pop";
+  var TIP_SCOPE = ".cb-root, .cb-panel, .cb-ed-pop, .cb-ctxmenu";
   var TIP_HOLD_MS = 400;    /* < vendor 的 550ms 长按：先出气泡，菜单后来者居上 */
   var TIP_LIFE_MS = 1200;   /* 自己会走，不靠抬手 */
 

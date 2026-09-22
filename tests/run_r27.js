@@ -292,7 +292,10 @@ ok(/\.cb-grid \{[\s\S]{0,400}?gap: var\(--cb-gap, 8px\);/.test(cssRaw),
   "D3：🔴 栅格 gap 吃变量（写死的 8px 已经就地改掉，不是新加一条覆盖）");
 ok(cssSeg.indexOf(".cb-grid") < 0,
   "D4：R27 段里没有第二条 .cb-grid（两条规则打架 = 以后改哪条都失效）");
-ok(/\.cb-ctx-status \{[\s\S]{0,260}?border-left: 2px solid var\(--interactive-accent\);/.test(cssSeg),
+/* R33 按意图重写：原来绑死「{ 之后 260 字符内」—— 注释一长就假红（R33 那次 Python 写文件
+ * 把 LF 转成 CRLF，271 → 278 直接顶破）。**字符距离不是意图**，先取整条规则再判属性。 */
+const ctxStatus = (cssSeg.match(/\.cb-ctx-status \{[\s\S]*?\}/) || [""])[0];
+ok(/border-left: 2px solid var\(--interactive-accent\);/.test(ctxStatus),
   "D5：回执那条左边一道强调色竖条（一眼认出是回执，不是新的设置项）");
 ok(/\.cb-card\.cb-flash \{[\s\S]{0,200}?border-color: var\(--interactive-accent\);/.test(cssSeg),
   "D6：描边闪的类自带强调色描边（关掉动画也留得住）");

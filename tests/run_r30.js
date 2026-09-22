@@ -130,10 +130,13 @@ ok(/grid-area:\s*count;/.test(cntMobile) && /text-overflow:\s*ellipsis;/.test(cn
    /min-width:\s*0;/.test(cntMobile),
   "C2：自查项 —— 长统计（排除/截断护栏文案）手机端省略号收尾，不把按钮挤下去");
 const roTouch = ruleOf(cbCss, ".is-mobile .cb-ro,");
-ok(/min-height:\s*30px;/.test(roTouch) && /padding:\s*5px 10px;/.test(roTouch) &&
+/* R33 按意图重写：原来绑死 `min-height:30px`。意图是「三颗同一档、不再 ⚙ 矮一截」，
+ * 档位值本身是 R33 统一过的（cb / kbt / ns 三个文件都 34px）—— 取出来比，别写死。 */
+const roMh = (roTouch.match(/min-height:\s*(\d+)px/) || [])[1] || "";
+ok(roMh === "34" && /padding:\s*5px 10px;/.test(roTouch) &&
    roTouch.indexOf(".cb-gear") > 0 && roTouch.indexOf(".cb-refresh") > 0,
-  "C3：🔴 ✎可编辑 / ⚙板块 / ↻重载 **三颗同一档**（min-height:30px + 5px 10px）" +
-  " —— 实测 ⚙ 只有 18px、y 也不齐（12 vs 6），R31 拉齐（⚙ 是看板设置面板的唯一入口）");
+  "C3：🔴 ✎可编辑 / ⚙板块 / ↻重载 **三颗同一档**（同一条规则、同 padding、触控下限 34px）" +
+  " —— 实测 ⚙ 只有 18px、y 也不齐（12 vs 6），R31 拉齐；R33 把档位统一到 34px（原 30）");
 const roBase = ruleOf(cbCss, ".cb-ro {");
 ok(roBase.indexOf("order") < 0,
   "C4：🔴 桌面主规则 .cb-ro 没有 order —— 桌面一行不受影响");
@@ -197,12 +200,17 @@ ok(/grid-area:\s*refresh;[\s\S]{0,300}?margin-left:\s*0;/.test(ruleOf(r30Seg, ".
 ok(/max-width:\s*45vw;/.test(ruleOf(r30Seg, ".cb-mode {")),
   "G3：.cb-mode 上限用**绝对长度** 45vw —— 原来 100% 在 max-content 列里等于没上限，" +
   "长文案（自动分组…）会把第二行的统计挤没");
-const touchAll = ruleOf(cbCss, ".is-mobile .cb-root button,");
-ok(/min-height:\s*30px;/.test(touchAll) && touchAll.indexOf(".cb-add-type") > 0,
-  "G4：🔴 触控目标改**兜底式**（看板内所有 button + .cb-add-type 先打 30px 底）" +
-  " —— 原来是 14 条逐个点名的白名单，漏了 ＋/✕/属性展开/数据源钮（都 ≈19~20px）");
+const touchAll = ruleOf(cbCss, ".is-mobile .cb-root :is(button,");
+/* R33 按意图重写：原来只认 `<button>`（绑死元素名）。意图是「兜底式 + 按可点语义」——
+ * vendor 里用 label/span/div 做的可点目标（开关胶囊 34×19、属性值 ≈17px、目录树 ≈17px、
+ * 拖拽手柄 ≈14px、拉杆 16px）全都不是 button，白名单一条都没盖到。 */
+ok(touchAll.length > 0 && /min-height:\s*34px/.test(touchAll) &&
+   touchAll.indexOf("checkbox-container") > 0 && touchAll.indexOf("cb-prop-val") > 0 &&
+   touchAll.indexOf("cb-tree-node") > 0 && touchAll.indexOf("cb-grip") > 0,
+  "G4：🔴 触控兜底 = **兜底式 + 按可点语义**（不是逐条点名的白名单）" +
+  " —— R33 扩面：原来只认 <button>，漏了开关胶囊 / 属性值 / 目录树 / 拖拽手柄");
 const plusM = ruleOf(cbCss, ".is-mobile .cb-plus {");
-ok(/height:\s*auto;/.test(plusM) && /min-height:\s*30px;/.test(plusM),
+ok(/height:\s*auto;/.test(plusM) && /min-height:\s*34px;/.test(plusM),
   "G5：写死 height:19px 的 .cb-plus 先解掉 height —— min-height 打不过 height（白名单漏的就是它）");
 const hoverNone = segOf(cbCss, "@media (hover: none)");
 ok(count(/:hover/g, hoverNone) >= 6,

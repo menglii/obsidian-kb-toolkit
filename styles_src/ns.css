@@ -69,10 +69,12 @@
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.bns-item:hover {
-  border-color: var(--background-modifier-border-hover);
-  /* R3b：同 cb.css —— 本体阴影变量 + 原值兜底 */
-  box-shadow: var(--shadow-xs, 0 1px 6px rgba(0, 0, 0, 0.06));
+@media (hover: hover) {
+  .bns-item:hover {
+    border-color: var(--background-modifier-border-hover);
+    /* R3b：同 cb.css —— 本体阴影变量 + 原值兜底 */
+    box-shadow: var(--shadow-xs, 0 1px 6px rgba(0, 0, 0, 0.06));
+  }
 }
 
 .bns-head {
@@ -93,9 +95,11 @@
   border: none;
 }
 
-.bns-title:hover {
-  color: var(--link-color-hover);
-  text-decoration: underline;
+@media (hover: hover) {
+  .bns-title:hover {
+    color: var(--link-color-hover);
+    text-decoration: underline;
+  }
 }
 
 .bns-chip {
@@ -235,4 +239,28 @@
   background: transparent;
   border-style: dashed;
   color: var(--text-faint);
+}
+
+/* ============================================================
+ * R33：内容流**此前零手机端适配** —— ns.css 里 .is-mobile 与 @media(hover:none)
+ * 一条都没有（看板做了 R29~R32 四轮，内容流一次没跟）。
+ * 触控下限同样 34px（与 cb.css / kbt.css 同值，run_r33.js 有断言）。
+ * ============================================================ */
+.is-mobile .bns-bar :is(button, .bns-refresh) {
+  min-height: 34px;
+}
+.is-mobile .bns-refresh {
+  padding: 6px 10px;        /* 原来 2px 8px ≈ 20px 高 */
+}
+/* .bns-title 是行内 <a>，抬 min-height 必须换成 inline-flex，否则不吃高度 */
+.is-mobile .bns-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+}
+
+@media (hover: none) {
+  .bns-bar :is(button, .bns-refresh):active {
+    background-color: var(--background-modifier-hover);
+  }
 }

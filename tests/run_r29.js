@@ -246,7 +246,14 @@ const n360 = (function () {                        /* 取 360 块（{...} 配平
 ok(n360.length > 0 && !/\.is-mobile|\.is-phone|\.kbt-/.test(n360),
   "D1d：🔴 360 块不许长成第二套「手机端」口径 —— 只压工具条那两颗按钮，"
   + "不带 is-mobile / is-phone / 设置页类名（真要加手机端规则请回 700 档）");
-eq(count(/@media \(hover: none\)/g, cssRaw), 1, "D2：触屏（无 hover）断点只此一处");
+/* R33 按意图重写：原来绑死「只此一处」。意图是「触屏口径只有 hover:none 一种、且与桌面
+ * 口径分开」—— R33 把 30 条顶层 :hover 规则就地搬进 @media (hover:hover)（原来是「触屏
+ * 先生效再复位」的白名单，实测漏 26 个选择器），(hover:none) 块因此不止一块。 */
+const hnN = count(/@media \(hover: none\)/g, cssRaw);
+const hhN = count(/@media \(hover: hover\)/g, cssRaw);
+ok(hnN >= 1 && hhN >= 1,
+  "D2：触屏口径 = @media (hover:none)（" + hnN + " 块），桌面口径 = @media (hover:hover)（" +
+  hhN + " 块）—— 两套分开，不许混写；块数不限（R33 hover 根治后各有多块）");
 ok(/\.cb-bar \{[\s\S]{0,400}?display: grid;/.test(mobileCss) &&
    /grid-template-areas:[\s\S]{0,120}?"ro mid gear refresh"\s*\n\s*"mode count count count"/.test(mobileCss),
   "D3：🔴 窄屏工具条 = 两行 grid 模板（不横向溢出）—— R31：R29 那句 flex-wrap:wrap " +

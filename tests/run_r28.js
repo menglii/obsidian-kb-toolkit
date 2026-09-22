@@ -56,8 +56,16 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
 const stylesCss = fs.readFileSync(path.join(PLUG, "styles.css"), "utf8");
 
 const R28_MARK = "R28（老板报障：删空板块后";
-const cssSeg = cssRaw.slice(cssRaw.indexOf(R28_MARK));
-const builtSeg = stylesCss.slice(stylesCss.indexOf(R28_MARK));
+/* 🔴 R33 修（同 R29 修 r27 那次，铁律 49）：原来一路切到**文件尾**，后面每一轮追加的
+ * CSS 都被算进「R28 段」—— R33 在触控兜底 :is() 里点了 .cb-sec-allbtn，F2 立刻假红。
+ * 段就是段：切到**下一个轮次横幅**为止。 */
+function segToNext(s, mark, nextMark) {
+  const a = s.indexOf(mark);
+  const b = s.indexOf(nextMark, a + 1);
+  return s.slice(a, b < 0 ? s.length : s.lastIndexOf("/*", b));
+}
+const cssSeg = segToNext(cssRaw, R28_MARK, "R29（");
+const builtSeg = segToNext(stylesCss, R28_MARK, "R29（");
 
 /* ================= A. 配置层：新键 / 新常量 ================= */
 console.log("\n== R28 · 配置层：全部板块上限 ==");

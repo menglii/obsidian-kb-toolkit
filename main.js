@@ -9430,9 +9430,24 @@ KB.define("core/settingTab", function () {
       var p = pops[key];
       if (!p) return null;
       p.removeAttribute("hidden");
+      bindEscClose();          /* R33：Esc 也能关（原来只有 ✕ / 遮罩两处点击） */
       var body = p.querySelector ? p.querySelector(".kbt-pop-body") : null;
       if (body && body.scrollTop !== undefined) body.scrollTop = 0;
       return p;
+    }
+    /* R33：Esc 关闭 —— 全 document 只挂一次（每次 openPop 都 addEventListener 会泄漏，
+     * 设置页每渲染一遍就重建一批 pop）。只关「当前没被 hidden 的那个」。 */
+    var escBound = false;
+    function bindEscClose() {
+      if (escBound || !document || !document.addEventListener) return;
+      escBound = true;
+      document.addEventListener("keydown", function (ev) {
+        if (!ev || ev.key !== "Escape") return;
+        for (var k in pops) {
+          var p = pops[k];
+          if (p && !p.hasAttribute("hidden")) closePop(k);
+        }
+      });
     }
     tab._openPop = openPop;
     tab._closePop = closePop;
@@ -9529,7 +9544,13 @@ KB.define("core/settingTab", function () {
     function statusLine(box, tip) {
       var key = box._kbKey || tab._tab || "";
       var popKey = key + ":status";
-      var wrap = buildPop(box, popKey, "当前状态 · " + (TAB_LABEL[key] || ""), []);
+      /* 🔴 R33 P0：宿主必须是 containerEl，**不能**是 box。
+       * box = .kb-module-section，模块关闭时整段带 .kb-module-disabled（ns.css:220
+       * `pointer-events: none` 是**继承**属性）→ 浮层挂在它底下，连 ✕ 和遮罩都收不到
+       * 点击，遮罩再也去不掉；kbt.css:375 只放行了触发者（.kbt-status-card），没放行它
+       * 打开的窗。桌面还有 Esc 能退，手机端**没有任何出口** —— 点一下状态栏就卡死。
+       * 帮助（523）/ 关于（998）本来就挂 containerEl，这里对齐同一口径。 */
+      var wrap = buildPop(containerEl, popKey, "当前状态 · " + (TAB_LABEL[key] || ""), []);
       var sec = box.createEl("div", { cls: "kbt-sec kbt-status-card" });
       sec.createEl("div", { cls: "kbt-lb", text: "当前状态" });
       var card = sec.createEl("div", { cls: "kbt-card" });
@@ -11610,7 +11631,7 @@ KB.define("modules/base", function () {
    *     ③ z-index 30 < 遮罩 40 < 菜单 100：vendor 长按菜单出来会盖住它，不打架；
    *     ④ 桌面（有 hover）**压根不装**，零监听器、零开销。
    * ============================================================ */
-  var TIP_SCOPE = ".cb-root, .cb-panel, .cb-ed-pop";
+  var TIP_SCOPE = ".cb-root, .cb-panel, .cb-ed-pop, .cb-ctxmenu";
   var TIP_HOLD_MS = 400;    /* < vendor 的 550ms 长按：先出气泡，菜单后来者居上 */
   var TIP_LIFE_MS = 1200;   /* 自己会走，不靠抬手 */
 
