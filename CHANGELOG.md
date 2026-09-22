@@ -2,6 +2,70 @@
 
 本文件记录 kb-toolkit 每个轮次的可验收交付。版本号只在收尾轮 bump。
 
+## 未发布 — R31（与 Claude Code 交叉验证 → 框架 + 手机/电脑端界面交互优化）
+
+**老板原话**：和 claude code 对项目进行交叉验证，通过启用 claude 的开发优化 skill 的方式，
+对项目代码框架和手机电脑端操作界面，交互方式进行优化。
+
+### 怎么做（不是「让另一个模型夸一遍」）
+
+| 步骤 | 做法 |
+| --- | --- |
+| 两条只读评审 | A 路径 = 架构 / 依赖方向 / 重复实现 / 可维护性；B 路径 = 手机·电脑端一致性 / 断点与魔数 / 选择器冲突 / 交互反馈。**只读，不许改文件**（vendor 冻结套件更不许碰） |
+| 交叉模型 | 本机 Claude Code v2.1.278 非交互模式（后端是 DeepSeek，所以「交叉」= 我 vs 另一个模型） |
+| 我自己一份独立基线 | 长函数 / 跨文件重复中文字面量 / 空 catch / 大文件，先有自己的数，再拿它的结论对撞 |
+| 逐条复核 | 它给的每条都回源码 / asar / probe JSON 验一遍。**验出来是假的就不做**（本轮无一条造假，但我的 R30 自查漏了它抓到的 P0） |
+
+⚠️ 踩到的坑：`--permission-mode plan` 会把正文写进 `~/.claude/plans/` 而 stdout 只剩一句指针
+（B 路径 39 KB 正文就这么丢了）。第二次显式要求「别用 ExitPlanMode、别写 plan 文件、把完整
+分级评审打在最终回答里」才拿到全文。
+
+### A 路径落地（代码框架，4 条）
+
+| # | 问题 | 改法 |
+| --- | --- | --- |
+| 1 | `80_modules_automation.js` 写补全报告时，库根不存在也照样 `ensureFolder` → **逐级建出一个空的「假库根」**，之后向导建真库就撞名 | 与 `82` 的 `root-missing` 守卫同口径：根不在 → 不写报告（只 `console.warn`） |
+| 2 | 插件目录字面量 `".obsidian/plugins/kb-toolkit"` 在 66 / 80 / 82 各写一遍 | 收回 `00_prelude.js` 的 `KB.PLUGIN_DIR` 唯一出口 |
+| 3 | `66_services_report.js` 的 `logFolder` 写死默认 `"99_Meta"` —— 而 `run_r5` 的硬编码守卫要求 `99_Meta/`（**带斜杠**），裸字面量正好从缝里漏过去 | 默认值改在**调用时**取 `settings.DEFAULTS.paths`（本文件编号 66 < 70，定义时拿不到）；`run_r5` 补一条按意图的断言堵住这道缝 |
+| 4 | `80` 的 `_cmdIds` 恒为空、`removeCommands()` 每次 disable 白跑一趟（R13 收进设置页后本模块零 `addCommand`）；`catch (e) { this.stats.blocked++ }` 而 `stats` 全插件无人读 = 把异常吞掉 | 删死代码；catch 补 `console.warn` 留痕（不 rethrow —— 单篇失败不该中断整批补全） |
+
+**没做的那条**：`90_entry.js` 的 `applySettingsChange` 缺「中央表重算」，导致 `90` / `87` / `75`
+三处手写 `router.util.applySettings(S)`。合并要动三个调用点，属于独立重构，**留给老板定**。
+
+### B 路径落地（界面 / 交互，9 条）
+
+| # | 问题（实测数） | 改法 |
+| --- | --- | --- |
+| **P0** | R30 ①② 的作用域 `[data-type="creation-board"]` **真机根本不命中** —— leaf 的 `data-type` = `View.getViewType()` = 原生 `"bases"`（asar @1808481），`registerBasesView` 注册的是 Bases **内部**视图类型，不会出现在 leaf 上 | 改成 `[data-type="bases"]:has(.cb-root)`：锁真机值 + 用 `.cb-root` 收窄到我们的看板（顺带修掉「任何 Bases 视图都被打」的越界） |
+| 2 | `cb.css` 里两个 `@media (max-width:700px)` 块隔 128 行互相打架（grid 之后 `flex-wrap/row-gap` 成死声明、`.cb-mode` 的 max-width 写了两遍） | 合并成**唯一一块**（`run_r30` G1 钉住） |
+| 3 | 触控目标是 14 条**逐个点名**的白名单，漏了 `.cb-plus`(19px) / `.cb-panel-x`(≈19) / `.cb-pros-toggle`(≈19) / `.cb-add-type`(≈20) / `.cb-title`(≈23) | 改**兜底式**：`.is-mobile .cb-root button, .is-mobile .cb-add-type { min-height: 30px }`；写死 `height` 的 `.cb-plus` 先 `height: auto`（min-height 打不过 height） |
+| 4 | ⚙板块 **18px** vs ✎/↻ **30px**，y 也不齐（12 vs 6）；⚙ 是看板设置面板的唯一入口 | 三颗**同档**（min-height 30 + padding 5px 10px） |
+| 5 | `.cb-refresh` 还留着桌面的 `margin-left: 6px` → ⚙↻ 间距 **14** 而不是列距 8，看着不像一组 | 手机端清 0（实测 14.0 → 8.0） |
+| 6 | `.cb-mode` 的 `max-width: 100%` 在 `max-content` 列里等于**没上限**，长文案把第二行统计挤没 | 改绝对长度 `45vw` |
+| 7 | `@media (hover: none)` 只复位了 `.cb-card` 一家，其余 21 条 hover 在触屏上**粘住** | 按机制扩到 6 类选择器。🟡 **有意不复位 `.cb-prop-val`** —— 那块灰底是「这里能点/能改」的唯一提示，粘住的代价小于提示丢失，**待老板拍板** |
+| 8 | R30 ⑤ 把卡片**横向**内边距压成 12px（桌面是 14px）→ 手机比电脑**更贴**白框，与老板诉求相反（注释还写「8px→12px」，可桌面本来就是 14） | 改成**只覆盖纵向**（2px → 4px），横向沿用桌面 14px（几何层实测手机 = 桌面 = 14px） |
+| 9 | 设置页三个主标签手机端只有 **27px** 高、彼此隔 2px（同屏 ghost 按钮 34px） | `.is-mobile .kbt-tab { min-height: 34px }` + `.kbt-tabs { gap: 8px }` |
+
+### 验证（改前备份 `.workbuddy/backup/kb-toolkit-R31-2026-09-22/`，9 个文件 sha256 回读核对）
+
+| 层 | R30 基线 | R31 |
+| --- | --- | --- |
+| `run_all.js 3` | 2501 / 0（7503） | **2510 / 0（7530）** |
+| `run_r30.js` | 32 | **40**（+8 条 G 段 R31 归并断言） |
+| `run_r29.js` | 86 | **86**（段锚点失效导致的 11 条假红已按铁律 49 重写） |
+| `run_r5.js` | 103 | **104**（+1 堵裸字面量的缝） |
+| 真引擎几何 | 41 / 0 | **42 / 0**（+1 对照页） |
+| 真引擎像素 | 23 / 0 | **23 / 0** |
+| `main.js` | 577,991 B | **579,809 B** |
+| `styles.css` | 79,575 B | **83,746 B** |
+
+### 待老板定（4 条，本轮**故意没动**）
+
+1. R30 ⑤ 用的是 `body.is-mobile`，窄桌面窗口（`@media 700px`）要不要也照做？—— 碰「桌面零影响」这条边界，不敢替老板扩。
+2. `.cb-prop-val` 的 hover 到底复不复位（见上表 #7）。
+3. 42 个 `title` 属性在触屏上等于没有（长按 `preventDefault` 会掐掉原生 tooltip），要不要改成气泡/提示条（牵涉 vendor 回调）。
+4. 极窄屏时工具条 `max-content` 永不折行 → 静默裁切，是加横向滚动还是缩短按钮文案。
+
 ## 未发布 — R30（老板五条：手机端排版与手感专项）
 
 **老板五条**（2026-09-20，一句话原文 + 附加要求「不要影响电脑端界面，保证代码清晰度和可维护性」）：

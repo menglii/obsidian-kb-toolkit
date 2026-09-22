@@ -5,8 +5,8 @@
  *     并给一条「打开最近一次报告」命令。
  * 危险操作一律不自动触发：命令 → 弹窗 → 勾选坚果云已同步 → 点确认。 */
 KB.define("modules/rebuild", function () {
-  var DIR = ".obsidian/plugins/kb-toolkit/";
-  var PLUGDIR = DIR.replace(/\/+$/, "");
+  var DIR = KB.PLUGIN_DIR + "/";   /* R31：字面量收回 00_prelude.js 的唯一出口 */
+  var PLUGDIR = KB.PLUGIN_DIR;
   var PREVIEW = DIR + "rebuild-preview.json";
   var MANIFEST = DIR + "rebuild-manifest.json";
   var JOURNAL = DIR + "rebuild-journal.json";

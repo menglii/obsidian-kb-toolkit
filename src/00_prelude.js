@@ -9,5 +9,9 @@ KB.get = function (id) {
   for (var i = 0; i < KB.reg.length; i++) if (KB.reg[i].id === id) return KB.reg[i].factory;
   throw new Error("kb-toolkit: 未注册的模块 " + id);
 };
+/* R31（交叉评审抓出）：插件目录字面量的**唯一出口**。
+ * 原来 66 / 80 / 82 各写一遍 `".obsidian/plugins/kb-toolkit"` —— 报告里显示
+ * 「日志与清单落在哪儿」用的是同一个串，改目录名要改三处，漏一处就前后不一致。 */
+KB.PLUGIN_DIR = ".obsidian/plugins/kb-toolkit";
 /* 供离线断言直接访问内部服务（真机无副作用） */
 if (typeof globalThis !== "undefined") globalThis.KB = KB;

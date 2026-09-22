@@ -45,10 +45,20 @@ KB.define("services/report", function () {
     out.push("");
     return out;
   }
+  /** R31：默认路径配置的**唯一真源**在 70_core_settings.js（DEFAULTS.paths）。
+   *  本文件编号 66 < 70，定义时拿不到那份常量 → 只在**调用时**读（运行时必然已注册）。
+   *  🔴 交叉评审抓出：原来这里写死 `"99_Meta"`，而 run_r5 的硬编码守卫要求
+   *     `99_Meta/`（**带斜杠**）→ 裸字面量正好从缝里漏过去，等于默认值在两处各写一遍，
+   *     用户改了元目录名之后，只有一处跟着变。守卫的缝由 run_r5 的 A2 断言补上。 */
+  function defaultPaths() {
+    var S = KB.services && KB.services.settings;
+    return (S && S.DEFAULTS && S.DEFAULTS.paths) || null;
+  }
   /** 操作日志目录（相对库根）：<root>/<metaDir>/05_操作日志 */
   function logFolder(paths, rootPath) {
-    var meta = (paths && paths.metaDir) || "99_Meta";
-    var base = rootPath || (paths && paths.knowledgeBase) || "";
+    var p = paths || defaultPaths() || {};
+    var meta = p.metaDir || "";
+    var base = rootPath || p.knowledgeBase || "";
     return (base ? base + "/" : "") + meta + "/" + LOG_SUBDIR;
   }
 
@@ -66,7 +76,7 @@ KB.define("services/report", function () {
     payload = payload || {};
     var now = (opts.now instanceof Date) ? opts.now : new Date();
     var k = KINDS[kind] || KINDS.preview;
-    var DIR = opts.pluginDir || ".obsidian/plugins/kb-toolkit";
+    var DIR = opts.pluginDir || KB.PLUGIN_DIR;
     var L = [];
 
     L.push("---");

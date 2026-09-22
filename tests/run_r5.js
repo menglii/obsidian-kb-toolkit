@@ -79,6 +79,11 @@ function readSrc() {
   ok(BANNED.some(re => re.test(src[DEFAULT_OUTLET])), "A：默认值出口确实持有路径字面量（审计没空跑）");
   const holders = Object.keys(src).filter(f => BANNED.some(re => re.test(stripComments(src[f]))));
   eq(holders.join(","), DEFAULT_OUTLET, "A：路径字面量只出现在 " + DEFAULT_OUTLET);
+  /* R31（交叉评审抓出）：BANNED 里的 `99_Meta\s*\/` 要求**带斜杠**，裸的 `"99_Meta"`
+   * 正好从缝里漏过去 —— 66_services_report.js 曾在 logFolder 里写死默认元目录而守卫没响。
+   * 这里按**意图**补一条，不靠正则形状：报告层不许自带顶层目录字面量。 */
+  ok(!/99_Meta/.test(stripComments(src["66_services_report.js"])),
+    "A：报告层不带顶层目录字面量（默认值一律取 settings.DEFAULTS）");
 
   /* ================= B. 默认值派生一致性 ================= */
   const P = D.paths;

@@ -67,7 +67,10 @@ const mainJs = fs.readFileSync(path.join(PLUG, "main.js"), "utf8");
 const stylesCss = fs.readFileSync(path.join(PLUG, "styles.css"), "utf8");
 
 const CSS_BADGE_MARK = "R29（boss 第 2 条）：就地编辑浮层 —— 字号徽标";
-const CSS_MOBILE_MARK = "R29（boss 第 3 条）：手机端适配";
+/* 🔴 R31：锚点只认**轮次标签**，不认描述 —— R31 把章节标题改成
+ * 「R29（boss 第 3 条）+ R30 ③ + R31 归并：手机端适配」，带描述的锚点当场落空
+ * （mobileCss 变空串 → D3~D12 假红；badgeCss 一路吃到文件尾 → C8 假红）。 */
+const CSS_MOBILE_MARK = "R29（boss 第 3 条）";
 const badgeCss = segOf(cssRaw, CSS_BADGE_MARK, CSS_MOBILE_MARK);
 const mobileCss = segOf(cssRaw, CSS_MOBILE_MARK);
 
@@ -224,7 +227,10 @@ eq(new Set(cbBps).size, 1,
 eq(cbBps[0] || "", "700",
   "D1b：断点 = 700px（与设置页 kbt.css 的 @media (max-width: 700px) 同值）");
 eq(count(/@media \(hover: none\)/g, cssRaw), 1, "D2：触屏（无 hover）断点只此一处");
-ok(/\.cb-bar \{\s*\n\s*flex-wrap: wrap;/.test(mobileCss), "D3：窄屏工具条可折行（不横向溢出）");
+ok(/\.cb-bar \{[\s\S]{0,400}?display: grid;/.test(mobileCss) &&
+   /grid-template-areas:[\s\S]{0,120}?"ro mid gear refresh"\s*\n\s*"mode count count count"/.test(mobileCss),
+  "D3：🔴 窄屏工具条 = 两行 grid 模板（不横向溢出）—— R31：R29 那句 flex-wrap:wrap " +
+  "在 grid 之后已是死声明（折行由模板钉死），按**意图**改成验 grid 模板");
 ok(/\.cb-section-head \{\s*\n\s*flex-wrap: wrap;/.test(mobileCss), "D4：窄屏板块头可折行");
 ok(/minmax\(min\(var\(--cb-card-w\), 100%\), var\(--cb-card-max, 1fr\)\)/.test(mobileCss),
   "D5：🔴 卡片最小宽比屏还宽时不许撑破页面（min(…, 100%) 兜住）");

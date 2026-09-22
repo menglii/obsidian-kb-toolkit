@@ -480,9 +480,14 @@
     justify-content: flex-start;
   }
   .kbt-group { padding: 0; }
-  /* R30 第 5 条（卡片内边距）：8px → 12px，内容和白框别贴那么近
+  /* R31 修正：R30 写成 `padding: 4px var(--size-4-3)`（横内边距 = 12px），
+   *  可桌面的横内边距是 **14px** —— 手机端反而收到 12px，比电脑**更贴**白框，
+   *  方向与老板「按钮和文字离白色框太近」的诉求相反（幅度只有 2px，肉眼看不出，
+   *  只会隐约觉得「手机上还是挤」）。
+   *  改成**只覆盖纵向**（2px → 4px，按钮不贴上下边），横向沿用桌面的 14px，
+   *  手机上内容与白框的距离 = 电脑。
    * （注释里别复述 run_r30 的段标记字样，否则切片边界会提前） */
-  .kbt-card { padding: 4px var(--size-4-3); }
+  .kbt-card { padding-top: 4px; padding-bottom: 4px; }
   .kbt-ghost-btn { min-height: 34px; }
   .kbt-card button { min-height: 36px; }
   .kbt-switch .checkbox-container { width: 40px; height: 24px; border-radius: 999px; margin: 0; }
@@ -510,6 +515,11 @@
   max-width: 100%;
   flex: 0 0 auto;
 }
+/* R31：三个主标签（知识库 / 笔记 / Base）是设置页的一级导航，
+ * 手机端实测只有 27px 高、彼此只隔 2px（同屏下方「日志/关于/帮助」是 34px）
+ * —— 三个并排紧挨，误触隔壁页的概率不低。提到与 ghost 按钮同档。 */
+.is-mobile .kbt-tab { min-height: 34px; }
+.is-mobile .kbt-tabs { gap: var(--size-4-2); }
 /* Obsidian 移动端（body.is-mobile）：触控尺寸再放宽一点 */
 .is-mobile .kbt-switch .checkbox-container { width: 42px; height: 26px; border-radius: 999px; margin: 0; }
 .is-mobile .kbt-switch .checkbox-container::after { width: 20px; height: 20px; top: 3px; left: 3px; border-radius: 50%; margin: 0; transform: none; }

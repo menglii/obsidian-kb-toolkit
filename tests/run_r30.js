@@ -11,15 +11,20 @@
  * 🔴 本轮要钉的坑：
  *   ①② 是 **Obsidian 原生 UI**（view-header 面包屑 / .bases-toolbar），类名按 asar 取证
  *      （view-header-title-parent @230998；bases-toolbar-views-menu / -result-count @526121），
- *      不许凭记忆猜。且 ① 只作用于看板叶子（data-type="creation-board"），笔记页路径不动。
- *   ③ 只改 order，不加新布局 —— ⚙板块 的 margin-left:auto（桌面规则）继续负责「靠右」。
+ *      不许凭记忆猜。且 ① 只作用于**我们的看板叶子**（Bases 视图 + 内部有 .cb-root），
+ *      笔记页路径、别的 Bases 视图都不动。
+ *      🔴 R31 取证：leaf 的 data-type = View.getViewType() = 原生 "bases"（asar @1808481），
+ *      registerBasesView 注册的视图类型**不会**出现在 leaf 上 → R30 写的 creation-board
+ *      **真机零命中**（自建 DOM 的几何层测不出这一条，只有读 asar 才看得见）。
+ *   ③ 手机端用 grid 模板钉死两行；⚙板块 / ✎可编辑 的 margin-left:auto（桌面规则）原样保留。
  *   ⑤ 原生 @container(max-width:400px) 把 setting-item 竖排 + 按钮铺满（特异性 0,3,1/0,4,1）
  *      → 覆盖规则用 body.is-mobile + 双类压过（0,5,x），**不用 !important**。
  *   🔴 只准加媒体查询 / .is-mobile / .is-phone，桌面那套一行不许动（r18-211 的
  *      「.kbt-ghost-btns margin-left:auto」桌面规则还在，这里再守一次）。
  *
- * 段切片一律**有界**（铁律 49）：R30 的 cb.css 段 = 「R30（boss 五条」→ 文件尾（当前是最后一段，
- * 下一轮追加后必须把 nextMark 补上）；kbt.css 的 700px 段 = 「手机端 / 窄窗」→ 「Obsidian 移动端」。
+ * 段切片一律**有界**（铁律 49）：cb.css 的「手机端整段」= 「R29（boss 第 3 条）」→ 文件尾
+ * （🔴 R31：R30 ③ 的 grid 规则被并进了**唯一的 700px 块**，那块在 R30 注释**之前** ——
+ * 还按「R30（boss 五条」切会把 C1/C2 切漏）；kbt.css 的 700px 段 = 「手机端 / 窄窗」→ 「R30（boss 第 5 条）」。
  * 真引擎几何 + 像素那两层在 tmp/render_r30.py / tmp/check_r30_shots.py。
  */
 const path = require("path");
@@ -63,7 +68,8 @@ const kbtCss = fs.readFileSync(path.join(PLUG, "styles_src", "kbt.css"), "utf8")
 const stylesCss = fs.readFileSync(path.join(PLUG, "styles.css"), "utf8");
 
 /* —— 有界段 —— */
-const r30Seg = segOf(cbCss, "R30（boss 五条");            // cb.css 尾段（当前最后一段）
+const r30Seg = segOf(cbCss, "R29（boss 第 3 条）");   // cb.css「手机端整段」（R31：含唯一 700px 块 + R30 三条）
+const cbCode = cbCss.replace(/\/\*[\s\S]*?\*\//g, ""); /* 剥注释后的 cb.css：数选择器 / 媒体块用 */
 /* kbt.css 700px 媒体块 = 「手机端 / 窄窗」→「R30（boss 第 5 条）」
  * （R30 的 is-mobile 覆盖插在 700px 块和「Obsidian 移动端」老段中间，别让它混进 700px 段） */
 const kbtMobile = segOf(kbtCss, "手机端 / 窄窗", "R30（boss 第 5 条）");
@@ -80,27 +86,30 @@ const r30SegCode = stripCssComments(r30Seg);
 /* ================= A. ① 面包屑只留本名（原生 UI，asar 取证） ================= */
 console.log("\n== R30 · ① base 面包屑手机端只留本名 ==");
 
-const crumbSel = 'body.is-phone .workspace-leaf-content[data-type="creation-board"] .view-header-title-parent';
+const crumbSel = 'body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .view-header-title-parent';
 eq(count(new RegExp(crumbSel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), cbCss), 1,
   "A1：面包屑规则恰 1 条（复写病自检）");
 ok(ruleOf(cbCss, crumbSel).indexOf("display: none") > 0,
   "A2：作用 = display:none（父目录段整段不渲染；`:empty` 本来就 none，末段文件名不受影响）");
-ok(crumbSel.indexOf('data-type="creation-board"') > 0,
-  "A3：🔴 只作用于看板叶子 —— 笔记页 / 其它视图的路径**不藏**（老板要的是 base 页）");
+ok(/\[data-type="bases"\]:has\(\.cb-root\)/.test(crumbSel),
+  "A3：🔴 作用域 = Bases 叶子 **且内部有 .cb-root** —— 笔记页路径不动、别的 Bases 视图不误伤" +
+  "（R31：leaf 的 data-type 是原生 bases，R30 的 creation-board 真机零命中）");
 ok(r30Seg.indexOf("view-header-title-parent") > 0 && r30Seg.indexOf("bases-toolbar") > 0,
   "A4：两条原生规则都在 R30 段内（有界切片没切漏）");
 
 /* ================= B. ② 原生 Bases 工具条：视图名只留图标、计数不显示 ================= */
 console.log("\n== R30 · ② 原生工具条手机端只留图标 ==");
 
-const viewsSel = "body.is-phone .bases-toolbar .bases-toolbar-views-menu .text-button-label";
-const cntSel = "body.is-phone .bases-toolbar .bases-toolbar-result-count";
+const viewsSel = 'body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-toolbar .bases-toolbar-views-menu .text-button-label';
+const cntSel = 'body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-toolbar .bases-toolbar-result-count';
 ok(ruleOf(cbCss, viewsSel).indexOf("display: none") > 0,
   "B1：「创作看板」的 .text-button-label 手机端不显示（图标 = svg，不受影响）");
 ok(ruleOf(cbCss, cntSel).indexOf("display: none") > 0,
   "B2：「344 个结果」(.bases-toolbar-result-count) 手机端整条不显示");
-ok(viewsSel.indexOf("body.is-phone") === 0 && cntSel.indexOf("body.is-phone") === 0,
-  "B3：🔴 作用域都是 body.is-phone —— 桌面 / 平板（is-mobile 而非 is-phone）不命中");
+ok(viewsSel.indexOf("body.is-phone") === 0 && cntSel.indexOf("body.is-phone") === 0 &&
+   /\[data-type="bases"\]:has\(\.cb-root\)/.test(viewsSel) && /\[data-type="bases"\]:has\(\.cb-root\)/.test(cntSel),
+  "B3：🔴 两条都是 body.is-phone **且**收窄到我们的看板 —— 桌面/平板不命中，" +
+  "内容流 / 原生表格等**别的** Bases 视图也照样显示视图名和结果数（R31 收窄，原来无差别全打）");
 eq(count(/bases-toolbar-result-count/g, cbCss), 1, "B4：result-count 选择器只写 1 次");
 
 /* ================= C. ③ 工具条：✎可编辑 最左，⚙板块 / ↻重载 靠右 ================= */
@@ -120,9 +129,11 @@ const cntMobile = ruleOf(r30Seg, ".cb-count {");
 ok(/grid-area:\s*count;/.test(cntMobile) && /text-overflow:\s*ellipsis;/.test(cntMobile) &&
    /min-width:\s*0;/.test(cntMobile),
   "C2：自查项 —— 长统计（排除/截断护栏文案）手机端省略号收尾，不把按钮挤下去");
-const roTouch = ruleOf(cbCss, ".is-mobile .cb-ro {");
-ok(/padding:\s*5px 10px;/.test(roTouch),
-  "C3：触控目标 .is-mobile .cb-ro 与 ↻重载同档（5px 10px，R29 的先例）");
+const roTouch = ruleOf(cbCss, ".is-mobile .cb-ro,");
+ok(/min-height:\s*30px;/.test(roTouch) && /padding:\s*5px 10px;/.test(roTouch) &&
+   roTouch.indexOf(".cb-gear") > 0 && roTouch.indexOf(".cb-refresh") > 0,
+  "C3：🔴 ✎可编辑 / ⚙板块 / ↻重载 **三颗同一档**（min-height:30px + 5px 10px）" +
+  " —— 实测 ⚙ 只有 18px、y 也不齐（12 vs 6），R31 拉齐（⚙ 是看板设置面板的唯一入口）");
 const roBase = ruleOf(cbCss, ".cb-ro {");
 ok(roBase.indexOf("order") < 0,
   "C4：🔴 桌面主规则 .cb-ro 没有 order —— 桌面一行不受影响");
@@ -155,8 +166,11 @@ ok(/width:\s*auto;/.test(e3) && /flex:\s*0 0 auto;/.test(e3),
   "E3：按钮 width:auto + 不许 flex 拉伸（「生成预览报告」回到自然大小）");
 ok(kbtIsMobile.indexOf("kbt-core-actions") > 0 && kbtMobile.indexOf("kbt-core-actions") < 0,
   "E4：核心操作覆盖只落在 is-mobile 段（700px 段不重复写 —— 一个能力一条路）");
-ok(/padding:\s*4px var\(--size-4-3\);/.test(ruleOf(kbtMobile, ".kbt-card {")),
-  "E5：卡片内边距 8px → 12px（按钮/文字离白框远一点，老板点名）");
+const cardMobile = ruleOf(kbtMobile, ".kbt-card {");
+ok(/padding-top:\s*4px;/.test(cardMobile) && /padding-bottom:\s*4px;/.test(cardMobile) &&
+   !/padding(-left|-right)?:\s/.test(cardMobile),
+  "E5：🔴 手机端卡片**只加纵向**内边距（2px→4px），横向沿用桌面的 14px —— " +
+  "R30 写成 `padding: 4px var(--size-4-3)` = 横 12px，比电脑**更贴**白框，方向与老板诉求相反");
 eq(count(/!important/g, kbtIsMobileCode) + count(/!important/g, r30SegCode), 0,
   "E7：🔴 本轮新规则零 !important —— 用特异性（body.is-mobile + 双类）压原生，可维护");
 ok(!/\.is-mobile \.setting-item \{/.test(kbtCss),
@@ -171,6 +185,32 @@ ok(/"ro mid gear refresh"\s*\n\s*"mode count count count"/.test(stylesCss),
   "F3：styles.css 已带上工具条 grid 两行模板");
 ok(stylesCss.indexOf("kbt-core-actions .setting-item-control button") > 0,
   "F4：styles.css 已带上核心操作按钮规则");
+
+/* ================= G. R31 归并（与 Claude Code 交叉评审后落地） ================= */
+console.log("\n== R31 · 手机端归并 / 触控兜底 ==");
+
+eq(count(/@media \(max-width: 700px\)/g, cbCode), 1,
+  "G1：🔴 cb.css 里 700px 媒体块**只剩一处** —— R30 曾新开第二块，两块隔 128 行互相打架" +
+  "（grid 之后 flex-wrap/row-gap 变死声明、.cb-mode 的 max-width 写了两遍）");
+ok(/grid-area:\s*refresh;[\s\S]{0,300}?margin-left:\s*0;/.test(ruleOf(r30Seg, ".cb-refresh {")),
+  "G2：↻重载 清掉桌面的 margin-left:6px —— 叠在列距 8px 上 = 14px，⚙↻ 看着不像一组（实测 14.0）");
+ok(/max-width:\s*45vw;/.test(ruleOf(r30Seg, ".cb-mode {")),
+  "G3：.cb-mode 上限用**绝对长度** 45vw —— 原来 100% 在 max-content 列里等于没上限，" +
+  "长文案（自动分组…）会把第二行的统计挤没");
+const touchAll = ruleOf(cbCss, ".is-mobile .cb-root button,");
+ok(/min-height:\s*30px;/.test(touchAll) && touchAll.indexOf(".cb-add-type") > 0,
+  "G4：🔴 触控目标改**兜底式**（看板内所有 button + .cb-add-type 先打 30px 底）" +
+  " —— 原来是 14 条逐个点名的白名单，漏了 ＋/✕/属性展开/数据源钮（都 ≈19~20px）");
+const plusM = ruleOf(cbCss, ".is-mobile .cb-plus {");
+ok(/height:\s*auto;/.test(plusM) && /min-height:\s*30px;/.test(plusM),
+  "G5：写死 height:19px 的 .cb-plus 先解掉 height —— min-height 打不过 height（白名单漏的就是它）");
+const hoverNone = segOf(cbCss, "@media (hover: none)");
+ok(count(/:hover/g, hoverNone) >= 6,
+  "G6：触屏 hover 复位覆盖 ≥6 类选择器 —— 原来只复位 .cb-card 一家，其余 21 条 hover 会粘住");
+ok(cbCode.indexOf('data-type="creation-board"') < 0,
+  "G7：🔴 旧作用域 data-type=\"creation-board\" 连注释外也彻底清除（真机零命中的写法）");
+ok(stylesCss.indexOf(":has(.cb-root)") > 0,
+  "G8：styles.css 已带上 :has(.cb-root) 收窄（构建产物 = 源码）");
 
 console.log("\nR30: " + pass + " 通过 / " + fail + " 失败");
 if (fail) { process.exitCode = 1; }

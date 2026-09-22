@@ -12,6 +12,10 @@ KB.get = function (id) {
   for (var i = 0; i < KB.reg.length; i++) if (KB.reg[i].id === id) return KB.reg[i].factory;
   throw new Error("kb-toolkit: 未注册的模块 " + id);
 };
+/* R31（交叉评审抓出）：插件目录字面量的**唯一出口**。
+ * 原来 66 / 80 / 82 各写一遍 `".obsidian/plugins/kb-toolkit"` —— 报告里显示
+ * 「日志与清单落在哪儿」用的是同一个串，改目录名要改三处，漏一处就前后不一致。 */
+KB.PLUGIN_DIR = ".obsidian/plugins/kb-toolkit";
 /* 供离线断言直接访问内部服务（真机无副作用） */
 if (typeof globalThis !== "undefined") globalThis.KB = KB;
 /* ===== KB-EMBED:CreationBoardPlugin BEGIN（字节级原样内嵌，勿改） ===== */
@@ -8507,10 +8511,20 @@ KB.define("services/report", function () {
     out.push("");
     return out;
   }
+  /** R31：默认路径配置的**唯一真源**在 70_core_settings.js（DEFAULTS.paths）。
+   *  本文件编号 66 < 70，定义时拿不到那份常量 → 只在**调用时**读（运行时必然已注册）。
+   *  🔴 交叉评审抓出：原来这里写死 `"99_Meta"`，而 run_r5 的硬编码守卫要求
+   *     `99_Meta/`（**带斜杠**）→ 裸字面量正好从缝里漏过去，等于默认值在两处各写一遍，
+   *     用户改了元目录名之后，只有一处跟着变。守卫的缝由 run_r5 的 A2 断言补上。 */
+  function defaultPaths() {
+    var S = KB.services && KB.services.settings;
+    return (S && S.DEFAULTS && S.DEFAULTS.paths) || null;
+  }
   /** 操作日志目录（相对库根）：<root>/<metaDir>/05_操作日志 */
   function logFolder(paths, rootPath) {
-    var meta = (paths && paths.metaDir) || "99_Meta";
-    var base = rootPath || (paths && paths.knowledgeBase) || "";
+    var p = paths || defaultPaths() || {};
+    var meta = p.metaDir || "";
+    var base = rootPath || p.knowledgeBase || "";
     return (base ? base + "/" : "") + meta + "/" + LOG_SUBDIR;
   }
 
@@ -8528,7 +8542,7 @@ KB.define("services/report", function () {
     payload = payload || {};
     var now = (opts.now instanceof Date) ? opts.now : new Date();
     var k = KINDS[kind] || KINDS.preview;
-    var DIR = opts.pluginDir || ".obsidian/plugins/kb-toolkit";
+    var DIR = opts.pluginDir || KB.PLUGIN_DIR;
     var L = [];
 
     L.push("---");
@@ -10347,7 +10361,6 @@ KB.define("modules/automation", function () {
     this.mover = new P.mover(this.plugin.app);
     /* R13（boss：界面翻新）：一键补全命令收进设置页按钮（② 组「开始扫描」），
      * 命令面板不再重复入口。扫描/确认/报告逻辑原样（runAutofill 三段不变）。 */
-    this._cmdIds = [];
     var self = this;
     /**
      * R8：改成 **await 串行**（原来是 tryCreateFill 不 await、handle 立刻并行跑）。
@@ -10435,18 +10448,10 @@ KB.define("modules/automation", function () {
     if (this.handler) this.plugin.eventBus.off(this.handler);
     this.plugin.eventBus.stop();
     this.unpatchPropertySuggestions();
-    this.removeCommands();
-  };
-  /** R8：模块关掉 → 摘掉一键补全命令（与 ① 同一个硬门控规矩） */
-  AutomationModule.prototype.removeCommands = function () {
-    var cmds = this.plugin.app && this.plugin.app.commands;
-    var ids = this._cmdIds || [];
-    if (!cmds || typeof cmds.removeCommand !== "function") return 0;
-    var n = 0;
-    for (var i = 0; i < ids.length; i++) {
-      try { cmds.removeCommand("kb-toolkit:" + ids[i]); n++; } catch (e) { /* 摘不掉也不致命 */ }
-    }
-    return n;
+    /* R31（交叉评审抓出）：原来这里还有 removeCommands() + _cmdIds —— R13 把一键补全的
+     * 入口收进设置页之后，本模块**一条命令都不注册**（全文 grep 无 addCommand），
+     * ids 恒为空数组、每次 disable 白跑一趟。删掉。「关模块就摘命令」的规矩
+     * 由 ①（82_modules_rebuild.js）保留 —— 那里是真注册了 3 条。 */
   };
   AutomationModule.prototype.isOn = function () { return this.plugin.settings.modules.automation === true; };
   /** 与 ① 同样的守卫：模块关着时任何残留入口都不许动库 */
@@ -10509,8 +10514,15 @@ KB.define("modules/automation", function () {
     try {
       var svc = new KB.services.rebuild(app);
       var rep = svc.reportMarkdown("autofill", { result: res }, {
-        now: new Date(), paths: S.paths, pluginDir: ".obsidian/plugins/kb-toolkit" });
+        now: new Date(), paths: S.paths, pluginDir: KB.PLUGIN_DIR });
       var folder = KB.services.report.logFolder(S.paths, S.paths.knowledgeBase);
+      /* R31（交叉评审抓出）：库根不存在时 ensureFolder 会**逐级把整条路径建出来**
+       * → 平白多出一个空的「假库根」，用户之后再用向导建真库就撞名。
+       * 与 ①（82 writeLogNote 的 root-missing）同口径：根不在 → 报告不写。 */
+      if (!app.vault.getAbstractFileByPath(S.paths.knowledgeBase)) {
+        console.warn("[kb-toolkit] 库根不存在，跳过补全报告：" + S.paths.knowledgeBase);
+        return null;
+      }
       if (!app.vault.getAbstractFileByPath(folder)) await this.ensureFolder(folder);
       var path = folder + "/" + rep.fileName;
       /* R15 修：撞名只试 (2) 一次 → 同一分钟第三次补全时 create 抛错、报告静默丢。
@@ -10723,7 +10735,14 @@ KB.define("modules/automation", function () {
       });
       this.stats.patched = (this.stats.patched || 0) + 1;
       return true;
-    } catch (e) { this.stats.blocked++; return false; }
+    } catch (e) {
+      /* R31（交叉评审抓出）：stats 只在**本模块内**累加，全插件无人读 → 光 ++ 等于
+       * 把异常吞掉（出问题时控制台一行痕迹都没有）。补一条告警留痕；
+       * 不 rethrow —— 单篇失败不该中断整批补全。 */
+      this.stats.blocked++;
+      console.warn("[kb-toolkit] 补前言失败，跳过该篇：" + ((file && file.path) || "?"), e);
+      return false;
+    }
   };
 
   /* ================= R8：一键补全（扫描全库 → 批量补 YAML / 尾部双链） ================= */
@@ -10935,8 +10954,8 @@ KB.define("modules/automation", function () {
  *     并给一条「打开最近一次报告」命令。
  * 危险操作一律不自动触发：命令 → 弹窗 → 勾选坚果云已同步 → 点确认。 */
 KB.define("modules/rebuild", function () {
-  var DIR = ".obsidian/plugins/kb-toolkit/";
-  var PLUGDIR = DIR.replace(/\/+$/, "");
+  var DIR = KB.PLUGIN_DIR + "/";   /* R31：字面量收回 00_prelude.js 的唯一出口 */
+  var PLUGDIR = KB.PLUGIN_DIR;
   var PREVIEW = DIR + "rebuild-preview.json";
   var MANIFEST = DIR + "rebuild-manifest.json";
   var JOURNAL = DIR + "rebuild-journal.json";

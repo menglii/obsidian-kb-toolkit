@@ -1887,22 +1887,18 @@ input.cb-wrange:disabled {
 }
 
 /* ============================================================
- * R29（boss 第 3 条）：手机端适配
+ * R29（boss 第 3 条）+ R30 ③ + R31 归并：手机端适配
  *  两套：窄屏 @media(max-width:700px) + Obsidian 移动端 body.is-mobile
  *  桌面一行都不受影响（媒体查询 / .is-mobile 都不命中）
+ *  🔴 R31：本文件里 `@media (max-width: 700px)` **只此一处** —— R30 曾新开第二块，
+ *    两块相隔 128 行互相打架（grid 之后 `flex-wrap/row-gap` 变死声明、
+ *    `.cb-mode` 的 max-width 写了两遍）。现在全部归到这里。
  * ============================================================ */
 @media (max-width: 700px) {
-  /* 工具条与板块头都允许折行：窄屏塞不下就换行，别横向溢出 */
-  .cb-bar {
-    flex-wrap: wrap;
-    row-gap: 4px;
-  }
+  /* 板块头允许折行：窄屏塞不下就换行，别横向溢出 */
   .cb-section-head {
     flex-wrap: wrap;
     row-gap: 2px;
-  }
-  .cb-mode {
-    max-width: 100%;
   }
   .cb-root {
     padding: 0 6px 48px 6px;
@@ -1930,6 +1926,51 @@ input.cb-wrange:disabled {
     max-width: 92vw;
     max-height: calc(100vh - 16px);
     overflow-y: auto;
+  }
+
+  /* ---- R30 ③ 工具条两行排布：用 **grid 模板**钉死，不赌 flex 折行算法 ----
+   *   第 1 行 = [✎可编辑] ……… [⚙板块][↻重载]（老板点名：可编辑靠左、板块/重载靠右）
+   *   第 2 行 = [板块配置 N 个][统计……]
+   * 🔴 病根（flex 方案两连败）：桌面 .cb-ro / .cb-gear 自带 margin-left:auto，
+   *    且折行按 flex-basis 假想宽度算、不看能否收缩 → 长 count 把整行挤乱。
+   *    （R29 那句 `flex-wrap: wrap; row-gap: 4px` 在 grid 之后已成死声明，R31 删除） */
+  .cb-bar {
+    display: grid;
+    grid-template-columns: max-content 1fr max-content max-content;
+    grid-template-areas:
+      "ro mid gear refresh"
+      "mode count count count";
+    align-items: center;
+    gap: 4px 8px;
+  }
+  .cb-ro {
+    grid-area: ro;
+    margin-left: 0;      /* 🔴 清掉桌面的 auto（不清就飘到行中间，实测 x=213） */
+    margin-right: 0;
+  }
+  .cb-gear {
+    grid-area: gear;
+    margin-left: 0;      /* 🔴 同上；「靠右」由模板里那列空的 1fr 负责 */
+  }
+  .cb-refresh {
+    grid-area: refresh;
+    margin-left: 0;      /* 🔴 R31：桌面的 6px 也会算进这一格 → ⚙↻ 之间 14px 而非列距 8px，
+                             看着不像一组（实测 gear.right=311.7 / refresh.x=325.7） */
+  }
+  .cb-mode {
+    grid-area: mode;
+    justify-self: start;  /* 芯片不横向拉伸 */
+    max-width: 45vw;      /* 🔴 R31：绝对长度才真的参与列宽计算；原来 100% 在 max-content
+                             列里等于没上限，长文案（「自动分组（沿用 base 的 groupBy）」）
+                             会把第二行的统计挤到只剩几个字 */
+  }
+  /* 长统计（排除目录挡掉 N 篇 / 超上限截断…）在手机上省略号收尾，别把按钮挤下去 */
+  .cb-count {
+    grid-area: count;
+    flex: none;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -1961,9 +2002,6 @@ input.cb-wrange:disabled {
 .is-mobile .cb-ed-fs {
   padding: 4px 8px;
 }
-.is-mobile .cb-refresh {
-  padding: 5px 10px;
-}
 .is-mobile .cb-mini {
   min-height: 30px;
   padding-left: 9px;
@@ -1975,7 +2013,8 @@ input.cb-wrange:disabled {
   padding-right: 10px;
 }
 .is-mobile .cb-tri {
-  width: 1.6em;
+  width: 30px;          /* 🔴 R31：横向也要给够（原来 1.6em ≈ 21px） */
+  min-height: 30px;
   font-size: var(--font-ui-small);
 }
 .is-mobile .cb-section-name {
@@ -1984,11 +2023,50 @@ input.cb-wrange:disabled {
 .is-mobile .cb-title {
   padding-top: 2px;
   padding-bottom: 2px;
+  min-height: 30px;     /* 🔴 R31：卡片标题是「点开笔记」的唯一入口，原来 ≈23px */
 }
-/* 触屏没有 hover：别让「悬停才出来」的提示白占位置（点开是另一条路） */
+
+/* 🔴🔴 R31 触控兜底（交叉评审抓出）：
+ *  R29/R30 是**逐个点名**的白名单，漏了几个高频控件 —— 板块 ＋ 写死 19px、
+ *  面板 ✕ ≈19px、属性展开钮 ≈19px、菜单里 4 颗数据源钮 ≈20px。
+ *  老板的门槛是手机端 ≥30px。改成**兜底式**（与 kbt.css 设置页同款写法）：
+ *  看板内所有按钮先打 30px 底，再给特殊的补细节。
+ *  🔴 只放 .is-mobile —— 窄桌面窗口不撑胖鼠标目标（桌面零影响）。 */
+.is-mobile .cb-root button,
+.is-mobile .cb-add-type {
+  min-height: 30px;
+}
+/* 写死 height 的那些（.cb-plus 是 `height: 19px`）：min-height 打不过 height */
+.is-mobile .cb-plus {
+  height: auto;
+  min-height: 30px;
+}
+/* ✎可编辑 / ⚙板块 / ↻重载 三颗**同档** —— R30 ③ 要的是「一眼成组」，
+ * 但实测 ⚙ 只有 18px（另两颗 30），y 也不齐（12 vs 6）。
+ * ⚙ 是看板设置面板的唯一入口，点不中就打不开面板。 */
+.is-mobile .cb-ro,
+.is-mobile .cb-gear,
+.is-mobile .cb-refresh {
+  min-height: 30px;
+  padding: 5px 10px;
+}
+
+/* 触屏没有 hover：别让「悬停才出来」的提示白占位置
+ * 🔴 R31：原来只复位了 .cb-card 一家，其余 21 条 hover 在触屏上会**粘住**
+ *   （点过之后底色/光环不消失，看着像「还开着」）。按机制兜，不逐个点名。
+ *   🟡 有意**不**复位 .cb-prop-val：那块灰底是「这里可以点/可以改」的唯一提示，
+ *      复位了提示就没了 —— 粘住的代价小于提示丢失，这条留给老板拍板。 */
 @media (hover: none) {
   .cb-card:hover {
     border-color: var(--background-modifier-border);
+    box-shadow: none;
+  }
+  .cb-root button:hover,
+  .cb-ctx-item:hover,
+  .cb-row:hover,
+  .cb-tree-node:hover,
+  .cb-grip:hover {
+    background-color: transparent;
     box-shadow: none;
   }
 }
@@ -1997,67 +2075,32 @@ input.cb-wrange:disabled {
  * R30（boss 五条，手机端）：① 面包屑只留本名 ② 原生工具条只留图标
  *  ① body.is-phone：只藏「父目录段」（.view-header-title-parent，每段一个元素，
  *    asar 取证 @230998：`:empty` 本身就 display:none → 末段文件名不受影响）。
- *    只作用于看板这一片叶子（data-type="creation-board"），笔记页的路径不动。
  *  ② asar 取证 @524236 / @526121：原生容器 <540px 只藏**其它项**的 label，
  *    恰恰留着 views-menu 的「创作看板」和 result-count 的「344 个结果」→ 手机上
  *    两个字样都被截成省略号。这里在手机上把它们藏掉：视图名只剩图标，计数不占位。
+ *
+ *  🔴🔴 R31 修作用域（本轮 P0，交叉评审抓出 + asar 复验）：
+ *    ① 原来用 `[data-type="creation-board"]` —— **真机上根本不命中**。
+ *       asar 取证 @1808481：`.workspace-leaf-content` 的 data-type =
+ *       `View.getViewType()`，打开 .base 时那是 Obsidian 内置 Bases 视图的
+ *       type = **"bases"**（asar @3175846 `EZ="bases"`）；而我们
+ *       `registerBasesView(VIEW_TYPE, …)`（asar @3623977）注册的是 Bases **内部**
+ *       的视图类型，**不会**出现在 leaf 容器的 data-type 上。
+ *       → 正解：锁 `[data-type="bases"]`，再用 `:has(.cb-root)` 收窄到**我们的看板**
+ *         （`.cb-root` 只有看板渲染出来才有）。Obsidian 自带 `:has()`
+ *         （asar @239383 `@supports selector(:has(*))`）→ 可用。
+ *    ② 原来连 data-type 都没带 → 手机端**任何** Bases 视图（内容流 / 原生表格）
+ *       都会掉视图名和结果数，超出老板要的范围。一并收窄。
  *  桌面 / 平板（is-phone 不命中）一行都不受影响。
  * ============================================================ */
-body.is-phone .workspace-leaf-content[data-type="creation-board"] .view-header-title-parent {
+body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .view-header-title-parent {
   display: none;
 }
-body.is-phone .bases-toolbar .bases-toolbar-views-menu .text-button-label {
+body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-toolbar .bases-toolbar-views-menu .text-button-label {
   display: none;
 }
-body.is-phone .bases-toolbar .bases-toolbar-result-count {
+body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-toolbar .bases-toolbar-result-count {
   display: none;
-}
-
-/* ③ 工具条手机端两行排布 —— 用 **grid 模板**钉死，不赌 flex 折行算法：
- *      第 1 行 = [✎可编辑] ……… [⚙板块][↻重载]（老板点名：可编辑靠左、板块/重载靠右）
- *      第 2 行 = [板块配置 N 个][统计……]（长统计省略号收尾，不跟按钮抢行）
- *    🔴 病根（flex 方案两连败的教训）：桌面 .cb-ro / .cb-gear 都自带 margin-left:auto，
- *       且 count 的假想宽度（折行按 flex-basis 算，不看可否收缩）会把行挤乱 ——
- *       order + auto margin 拼不出确定性布局。grid areas 一眼可读，桌面零影响。 */
-@media (max-width: 700px) {
-  .cb-bar {
-    display: grid;
-    grid-template-columns: max-content 1fr max-content max-content;
-    grid-template-areas:
-      "ro mid gear refresh"
-      "mode count count count";
-    align-items: center;
-    gap: 4px 8px;
-  }
-  .cb-ro {
-    grid-area: ro;
-    margin-left: 0;      /* 🔴 清掉桌面的 auto（不清就飘到行中间，实测 x=213） */
-    margin-right: 0;
-  }
-  .cb-gear {
-    grid-area: gear;
-    margin-left: 0;      /* 🔴 同上；「靠右」由模板里的空 1fr 列负责 */
-  }
-  .cb-refresh {
-    grid-area: refresh;
-  }
-  .cb-mode {
-    grid-area: mode;
-    justify-self: start;  /* 芯片不横向拉伸 */
-    max-width: 100%;
-  }
-  /* 长统计（排除目录挡掉 N 篇 / 超上限截断…）在手机上省略号收尾，别把按钮挤下去 */
-  .cb-count {
-    grid-area: count;
-    flex: none;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-}
-/* 触控目标与 ↻重载 同一档（R29 给 refresh 加过 5px 10px） */
-.is-mobile .cb-ro {
-  padding: 5px 10px;
 }
 
 /* kbt.css — kb-toolkit 设置页/面板增强样式（R13 界面翻新 / R16 三标签改版 / R18 排版 v3）。
@@ -2542,9 +2585,14 @@ body.is-phone .bases-toolbar .bases-toolbar-result-count {
     justify-content: flex-start;
   }
   .kbt-group { padding: 0; }
-  /* R30 第 5 条（卡片内边距）：8px → 12px，内容和白框别贴那么近
+  /* R31 修正：R30 写成 `padding: 4px var(--size-4-3)`（横内边距 = 12px），
+   *  可桌面的横内边距是 **14px** —— 手机端反而收到 12px，比电脑**更贴**白框，
+   *  方向与老板「按钮和文字离白色框太近」的诉求相反（幅度只有 2px，肉眼看不出，
+   *  只会隐约觉得「手机上还是挤」）。
+   *  改成**只覆盖纵向**（2px → 4px，按钮不贴上下边），横向沿用桌面的 14px，
+   *  手机上内容与白框的距离 = 电脑。
    * （注释里别复述 run_r30 的段标记字样，否则切片边界会提前） */
-  .kbt-card { padding: 4px var(--size-4-3); }
+  .kbt-card { padding-top: 4px; padding-bottom: 4px; }
   .kbt-ghost-btn { min-height: 34px; }
   .kbt-card button { min-height: 36px; }
   .kbt-switch .checkbox-container { width: 40px; height: 24px; border-radius: 999px; margin: 0; }
@@ -2572,6 +2620,11 @@ body.is-phone .bases-toolbar .bases-toolbar-result-count {
   max-width: 100%;
   flex: 0 0 auto;
 }
+/* R31：三个主标签（知识库 / 笔记 / Base）是设置页的一级导航，
+ * 手机端实测只有 27px 高、彼此只隔 2px（同屏下方「日志/关于/帮助」是 34px）
+ * —— 三个并排紧挨，误触隔壁页的概率不低。提到与 ghost 按钮同档。 */
+.is-mobile .kbt-tab { min-height: 34px; }
+.is-mobile .kbt-tabs { gap: var(--size-4-2); }
 /* Obsidian 移动端（body.is-mobile）：触控尺寸再放宽一点 */
 .is-mobile .kbt-switch .checkbox-container { width: 42px; height: 26px; border-radius: 999px; margin: 0; }
 .is-mobile .kbt-switch .checkbox-container::after { width: 20px; height: 20px; top: 3px; left: 3px; border-radius: 50%; margin: 0; transform: none; }

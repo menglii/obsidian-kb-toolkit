@@ -19,7 +19,6 @@ KB.define("modules/automation", function () {
     this.mover = new P.mover(this.plugin.app);
     /* R13（boss：界面翻新）：一键补全命令收进设置页按钮（② 组「开始扫描」），
      * 命令面板不再重复入口。扫描/确认/报告逻辑原样（runAutofill 三段不变）。 */
-    this._cmdIds = [];
     var self = this;
     /**
      * R8：改成 **await 串行**（原来是 tryCreateFill 不 await、handle 立刻并行跑）。
@@ -107,18 +106,10 @@ KB.define("modules/automation", function () {
     if (this.handler) this.plugin.eventBus.off(this.handler);
     this.plugin.eventBus.stop();
     this.unpatchPropertySuggestions();
-    this.removeCommands();
-  };
-  /** R8：模块关掉 → 摘掉一键补全命令（与 ① 同一个硬门控规矩） */
-  AutomationModule.prototype.removeCommands = function () {
-    var cmds = this.plugin.app && this.plugin.app.commands;
-    var ids = this._cmdIds || [];
-    if (!cmds || typeof cmds.removeCommand !== "function") return 0;
-    var n = 0;
-    for (var i = 0; i < ids.length; i++) {
-      try { cmds.removeCommand("kb-toolkit:" + ids[i]); n++; } catch (e) { /* 摘不掉也不致命 */ }
-    }
-    return n;
+    /* R31（交叉评审抓出）：原来这里还有 removeCommands() + _cmdIds —— R13 把一键补全的
+     * 入口收进设置页之后，本模块**一条命令都不注册**（全文 grep 无 addCommand），
+     * ids 恒为空数组、每次 disable 白跑一趟。删掉。「关模块就摘命令」的规矩
+     * 由 ①（82_modules_rebuild.js）保留 —— 那里是真注册了 3 条。 */
   };
   AutomationModule.prototype.isOn = function () { return this.plugin.settings.modules.automation === true; };
   /** 与 ① 同样的守卫：模块关着时任何残留入口都不许动库 */
@@ -181,8 +172,15 @@ KB.define("modules/automation", function () {
     try {
       var svc = new KB.services.rebuild(app);
       var rep = svc.reportMarkdown("autofill", { result: res }, {
-        now: new Date(), paths: S.paths, pluginDir: ".obsidian/plugins/kb-toolkit" });
+        now: new Date(), paths: S.paths, pluginDir: KB.PLUGIN_DIR });
       var folder = KB.services.report.logFolder(S.paths, S.paths.knowledgeBase);
+      /* R31（交叉评审抓出）：库根不存在时 ensureFolder 会**逐级把整条路径建出来**
+       * → 平白多出一个空的「假库根」，用户之后再用向导建真库就撞名。
+       * 与 ①（82 writeLogNote 的 root-missing）同口径：根不在 → 报告不写。 */
+      if (!app.vault.getAbstractFileByPath(S.paths.knowledgeBase)) {
+        console.warn("[kb-toolkit] 库根不存在，跳过补全报告：" + S.paths.knowledgeBase);
+        return null;
+      }
       if (!app.vault.getAbstractFileByPath(folder)) await this.ensureFolder(folder);
       var path = folder + "/" + rep.fileName;
       /* R15 修：撞名只试 (2) 一次 → 同一分钟第三次补全时 create 抛错、报告静默丢。
@@ -395,7 +393,14 @@ KB.define("modules/automation", function () {
       });
       this.stats.patched = (this.stats.patched || 0) + 1;
       return true;
-    } catch (e) { this.stats.blocked++; return false; }
+    } catch (e) {
+      /* R31（交叉评审抓出）：stats 只在**本模块内**累加，全插件无人读 → 光 ++ 等于
+       * 把异常吞掉（出问题时控制台一行痕迹都没有）。补一条告警留痕；
+       * 不 rethrow —— 单篇失败不该中断整批补全。 */
+      this.stats.blocked++;
+      console.warn("[kb-toolkit] 补前言失败，跳过该篇：" + ((file && file.path) || "?"), e);
+      return false;
+    }
   };
 
   /* ================= R8：一键补全（扫描全库 → 批量补 YAML / 尾部双链） ================= */
