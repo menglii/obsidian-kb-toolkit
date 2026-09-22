@@ -11580,6 +11580,22 @@ KB.define("modules/base", function () {
         }
       } catch (e) { console.warn("[kb-toolkit] 注销同名 Bases 视图失败（继续注册）", vid, e); }
       var r = null;
+      /* R34：把 factory 包一层 —— 视图一建出来就给它装上键盘通道。
+       * 🔴 包在这里而不是「全局挂一个 document 监听」：视图是**每开一个看板标签建一个**、
+       *    关掉就销毁的；挂在实例上才能随实例一起收，也不会把设置页 / 别的视图算进来。
+       * 🔴 factory 的返回值必须**原样带回去**（Obsidian 拿它当视图实例）。 */
+      try {
+        if (reg && typeof reg.factory === "function" && !reg.__kbKeyFactory) {
+          var origFactory = reg.factory;
+          reg.__kbKeyFactory = true;
+          reg.factory = function (controller, containerEl) {
+            var v = origFactory.call(this, controller, containerEl);
+            try { installBoardKeyboard(v); }
+            catch (e3) { console.warn("[kb-toolkit] 装看板键盘通道失败（不影响看板）", e3); }
+            return v;
+          };
+        }
+      } catch (e4) { console.warn("[kb-toolkit] 包装视图 factory 失败（不影响看板）", e4); }
       try { r = orig.call(this, vid, reg); } catch (e2) { console.error("[kb-toolkit] 注册 Bases 视图失败", vid, e2); }
       rememberView(plugin, vid);
       return r;
@@ -11707,6 +11723,283 @@ KB.define("modules/base", function () {
     };
   }
   KB.modules.installTouchTips = installTouchTips;
+
+  /* ============================================================
+   * R34（boss 选 B）：看板**键盘可达性** —— 只开「卡片菜单的键盘通道」
+   *
+   * 问题（R33 取证）：卡片标题是 `<a>` 但**无 href / 无 tabindex / 无 role`
+   *   （vendor 1938），openNote 只被四条**鼠标**路径调用；卡片菜单唯一入口是
+   *   right-click + 长按（vendor 2017）；菜单项全是 `div`，只绑 `click`，无 role /
+   *   无 tabindex / 无方向键（vendor 3114）。→ 纯键盘用户在这一屏**一张笔记都打不开**。
+   *
+   * 设计（改外层，vendor 一个字节不动）：
+   *   ① **不给每张卡加 tabindex** —— 那种做法一屏 40 张卡就多 40 个 Tab 停靠点，
+   *      键盘用户 Tab 进卡片区等于掉进沼泽（这正是 boss 选 B 时我列的坏处）。
+   *   ② 只在 `cb-root` 上加**一个** keydown 委托 + 一个 roving 高亮：
+   *        · 卡片区被聚焦（root 自己 `tabindex="-1"` / 或已在高亮的卡上）
+   *        · ↑/↓/←/→ 移动高亮卡片 · Home/End 首末 · Enter = 打开笔记
+   *        · **菜单键 / Shift+F10** = 打开该卡的**操作菜单**（复用 vendor 的
+   *          `openCardMenu`，菜单内容与鼠标路径逐字同一份，不会分叉）
+   *        · 菜单开后：↑/↓/Home/End 移动高亮项 · Enter = 执行（走 `.click()` ——
+   *          实测能触发 vendor 的 click 处理器）· Esc = 关（vendor 自己已绑）
+   *   ③ **零 footprint 保证**：桌面**照样装**（键盘用户就在桌面），但：
+   *        · root 的 `tabindex="-1"` 不产生 Tab 停靠点；
+   *        · 高亮只在**键盘真的用过**之后才出现（`kb-key-nav` 类），鼠标用户一次都看不到；
+   *        · 不装任何鼠标事件 → 鼠标行为逐字节不变（可断言）。
+   *   ④ 高亮项靠**自己维护的索引**（不依赖 `document.activeElement`）——
+   *      离线 jsdom 里 `div.focus()` 不生效，靠 activeElement 的写法在套件里必假红。
+   *
+   * 🔴 边界：只在 `.cb-root` 内的 `.cb-card` 上活动；面板 / 就地编辑浮层里**不接管**
+   *    （那里的键盘语义是 Obsidian 自家的）；输入态（input/textarea/contenteditable）一律放行。
+   * ============================================================ */
+  var KEY_CARD = ".cb-card";
+  var KEY_ITEM = ".cb-ctx-item";
+  var NAV_CLS = "kb-key-nav";      /* 键盘导航已启用标记（鼠标用户永远看不到） */
+  var HOT_CLS = "kb-key-hot";      /* 当前高亮项 */
+
+  /** 输入态：这些元素上不接管方向键（否则方向键选词/移动光标会被抢） */
+  function isTyping(el) {
+    if (!el || !el.tagName) return false;
+    var t = el.tagName.toLowerCase();
+    if (t === "input" || t === "textarea" || t === "select") return true;
+    try { if (el.isContentEditable) return true; } catch (e) {}
+    return false;
+  }
+
+  /**
+   * 给一个看板视图实例装键盘通道。返回 { uninstall }。
+   * 幂等：同一实例重复装只生效一次。
+   */
+  function installBoardKeyboard(view, opts) {
+    opts = opts || {};
+    var doc = opts.doc || (view && view.rootEl && view.rootEl.ownerDocument)
+      || (typeof document !== "undefined" ? document : null);
+    var win = opts.win || (doc && doc.defaultView) || (typeof window !== "undefined" ? window : null);
+    var root = view && view.rootEl;
+    if (!view || !root || !doc || typeof doc.addEventListener !== "function") return null;
+    if (view.__kbKeyNav) return view.__kbKeyNav;   /* 幂等 */
+
+    /* 卡片高亮索引（列表每次操作现算，不缓存 —— 重渲染后自动跟上） */
+    var cardIdx = -1;
+    var itemIdx = -1;
+
+    function cards() {
+      try {
+        return Array.prototype.slice.call(root.querySelectorAll(KEY_CARD))
+          .filter(function (c) { return c.offsetParent !== null || true; });   /* 虚拟滚动外的也算，交给 .focus() 兜 */
+      } catch (e) { return []; }
+    }
+    function menuEl() { return view.cardMenuEl || null; }
+    function items(menu) {
+      try { return Array.prototype.slice.call(menu.querySelectorAll(KEY_ITEM)); } catch (e) { return []; }
+    }
+    function clearHot() {
+      try {
+        var all = root.querySelectorAll("." + HOT_CLS);
+        for (var i = 0; i < all.length; i++) all[i].classList.remove(HOT_CLS);
+        var mn = menuEl();
+        if (mn) {
+          var mi = mn.querySelectorAll("." + HOT_CLS);
+          for (var j = 0; j < mi.length; j++) mi[j].classList.remove(HOT_CLS);
+        }
+      } catch (e) {}
+    }
+    function markNav() { try { root.classList.add(NAV_CLS); } catch (e) {} }
+
+    /** 高亮第 i 张卡（并尽力聚焦 —— 真机可聚焦；离线聚焦无效也不影响高亮可断言） */
+    function hotCard(i) {
+      var cs = cards();
+      if (!cs.length) { cardIdx = -1; return null; }
+      if (i < 0) i = 0;
+      if (i > cs.length - 1) i = cs.length - 1;
+      clearHot();
+      cardIdx = i;
+      var el = cs[i];
+      try { el.classList.add(HOT_CLS); } catch (e) {}
+      markNav();
+      try { if (typeof el.focus === "function") el.focus({ preventScroll: false }); } catch (e) {}
+      try { if (typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" }); } catch (e) {}
+      return el;
+    }
+    function hotItem(i) {
+      var mn = menuEl();
+      if (!mn) return null;
+      var is = items(mn);
+      if (!is.length) { itemIdx = -1; return null; }
+      if (i < 0) i = 0;
+      if (i > is.length - 1) i = is.length - 1;
+      clearHot();
+      itemIdx = i;
+      var el = is[i];
+      try { el.classList.add(HOT_CLS); } catch (e) {}
+      try { if (typeof el.focus === "function") el.focus(); } catch (e) {}
+      return el;
+    }
+    function currentCard() {
+      var cs = cards();
+      if (cardIdx >= 0 && cardIdx < cs.length) return cs[cardIdx];
+      return null;
+    }
+
+    /** 从某个节点找到它属于哪张卡 */
+    function cardOf(node) {
+      var el = node;
+      while (el && el !== root) {
+        if (el.classList && el.classList.contains("cb-card")) return el;
+        el = el.parentNode;
+      }
+      return null;
+    }
+
+    function onKeydown(e) {
+      var t = e && e.target;
+      if (isTyping(t)) return;                       /* 输入态放行 */
+      var key = e && e.key;
+
+      /* ---------- 菜单开着：接管菜单内导航 ---------- */
+      var mn = menuEl();
+      if (mn) {
+        /* 菜单里若是「移动到…」那行输入框，输入态已在上面放行 */
+        var is = items(mn);
+        if (!is.length) return;
+        if (key === "ArrowDown" || key === "ArrowUp" || key === "Home" || key === "End" ||
+            key === "Enter" || key === " ") {
+          e.preventDefault(); e.stopPropagation();
+          if (key === "ArrowDown") hotItem(itemIdx + 1);
+          else if (key === "ArrowUp") hotItem(itemIdx - 1);
+          else if (key === "Home") hotItem(0);
+          else if (key === "End") hotItem(is.length - 1);
+          else {
+            /* Enter / Space = 执行当前高亮项（.click() 实测能触发 vendor 的处理器） */
+            if (itemIdx < 0) hotItem(0);
+            var el = is[itemIdx < 0 ? 0 : itemIdx];
+            if (el && typeof el.click === "function") el.click();
+          }
+          return;
+        }
+        return;   /* 菜单开着时，其余键交回 vendor（Esc 它自己绑了） */
+      }
+
+      /* ---------- 菜单关着：卡片区导航 ---------- */
+      var wantMenu = (key === "ContextMenu") || (key === "F10" && e.shiftKey);
+      var isNav = (key === "ArrowDown" || key === "ArrowUp" || key === "ArrowLeft" ||
+                   key === "ArrowRight" || key === "Home" || key === "End" || key === "Enter");
+
+      /* 只在这几种情况下接管：
+       *   ① 键盘菜单键（任意时候，只要焦点在看板/卡片里）
+       *   ② 已经有高亮卡（继续导航）
+       *   ③ 焦点正是在某张卡上（或 root 自己） */
+      var inBoard = !!(root.contains(t) || t === root);
+      if (!inBoard) return;
+      var cur = currentCard();
+      var onCard = !!cardOf(t);
+      if (!wantMenu && !isNav) return;
+      if (!wantMenu && !cur && !onCard) return;
+
+      /* 🔴 base 的语义：**已有高亮 → 从它移动**；否则 base = -1，
+       *    由下面的「进入方向」决定落在第一张还是最后一张。
+       *    写成 `onCard ? indexOf(cardOf(t))` 会让首按 ↓ 跳过第一张（踩过）；
+       *    只对 ↑/←/End 破例同样会让首按 ↑ 落回第一张（也踩过）——
+       *    **统一不看焦点落在哪张卡**：没高亮就是「进入」，方向说了算。 */
+      var base = cur ? cardIdx : -1;
+
+      if (wantMenu) {
+        e.preventDefault(); e.stopPropagation();
+        var c = cur || (onCard ? cardOf(t) : null) || cards()[0];
+        if (!c) return;
+        var idx = cards().indexOf(c);
+        if (idx >= 0) cardIdx = idx;
+        openMenuFor(c);
+        return;
+      }
+
+      if (key === "Enter") {
+        if (!cur) return;
+        e.preventDefault(); e.stopPropagation();
+        openNoteOf(cur);
+        return;
+      }
+
+      /* 方向键 / Home / End：移动高亮 */
+      e.preventDefault(); e.stopPropagation();
+      var n = cards().length;
+      if (!n) return;
+      if (base < 0) {
+        /* 首次进入卡片区：↓/→/Home 落在第一张；↑/←/End 落在最后一张 */
+        if (key === "ArrowUp" || key === "ArrowLeft" || key === "End") hotCard(n - 1);
+        else hotCard(0);
+        return;
+      }
+      if (key === "ArrowDown" || key === "ArrowRight") hotCard(base + 1);
+      else if (key === "ArrowUp" || key === "ArrowLeft") hotCard(base - 1);
+      else if (key === "Home") hotCard(0);
+      else if (key === "End") hotCard(n - 1);
+    }
+
+    /** 用 vendor 自己的 openCardMenu 打开某张卡的菜单（菜单内容与右键逐字同一份） */
+    function openMenuFor(cardEl) {
+      try {
+        var entry = cardEl && cardEl.__cbEntry;
+        if (!entry || typeof view.openCardMenu !== "function") return false;
+        var r = cardEl.getBoundingClientRect ? cardEl.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+        itemIdx = -1;
+        view.openCardMenu(cardEl, entry, r.left + 12, r.top + 12);
+        /* 菜单刚建出来 → 立刻把首项高亮上，键盘用户一眼看到从哪开始 */
+        hotItem(0);
+        return true;
+      } catch (e) { return false; }
+    }
+    /** 取这张卡对应的 entry（vendor 在卡片上留了 __cbEntry 吗 —— 兜底按 path 找） */
+    function openNoteOf(cardEl) {
+      try {
+        var entry = cardEl && cardEl.__cbEntry;
+        if (!entry) return false;
+        view.openNote(entry, false);
+        return true;
+      } catch (e) { return false; }
+    }
+
+    doc.addEventListener("keydown", onKeydown, true);
+
+    /* root 自己进「可聚焦但不进 Tab 序」的状态：Tab 键跳过它（不抢停靠点），
+     * 但点击 / 主动 .focus() 能把焦点放进来，键盘用户由此进入卡片区。 */
+    try {
+      if (!root.hasAttribute("tabindex")) root.setAttribute("tabindex", "-1");
+    } catch (e) {}
+
+    var api = {
+      onKeydown: onKeydown,        /* 测试可直接调 */
+      hotCard: hotCard,
+      hotItem: hotItem,
+      currentCard: currentCard,
+      cards: cards,
+      itemsOf: function () { var m = menuEl(); return m ? items(m) : []; },
+      uninstall: function () {
+        try { doc.removeEventListener("keydown", onKeydown, true); } catch (e) {}
+        clearHot();
+        try { root.classList.remove(NAV_CLS); } catch (e) {}
+        view.__kbKeyNav = null;
+      }
+    };
+
+    /* 🔴 收口：监听挂在 document 上，视图关了必须摘，否则每开一个看板标签泄漏一个
+     *    全局 keydown。vendor 的 onunload() 我们改不了 → **包这个实例的 onunload**
+     *    （只改运行时的实例方法，不动 vendor 文件一个字节），在里面先调自家的收尾。 */
+    try {
+      if (!view.__kbKeyUnloadWrapped) {
+        view.__kbKeyUnloadWrapped = true;
+        var origUnload = view.onunload;
+        view.onunload = function () {
+          try { api.uninstall(); } catch (e) {}
+          if (typeof origUnload === "function") return origUnload.apply(this, arguments);
+        };
+      }
+    } catch (e) { console.warn("[kb-toolkit] 包视图 onunload 失败（关视图时可能漏摘监听）", e); }
+
+    view.__kbKeyNav = api;
+    return api;
+  }
+  KB.modules.installBoardKeyboard = installBoardKeyboard;
 
   /** 创作看板：VIEW_TYPE = creation-board（原样） */
   function BoardModule(plugin) { this.plugin = plugin; }

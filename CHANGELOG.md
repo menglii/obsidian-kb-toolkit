@@ -2,6 +2,59 @@
 
 本文件记录 kb-toolkit 每个轮次的可验收交付。版本号只在收尾轮 bump。
 
+## 未发布 — R34（看板键盘可达性：只开「卡片菜单的键盘通道」）
+
+**老板拍板（2026-09-22）**：在 R33 留下的两条里，键盘这条选了 **B = 只开卡片菜单的键盘通道**——
+**不给每张卡加 `tabindex`**（那样一屏 40 张卡就多 40 个 Tab 停靠点，键盘用户 Tab 进卡片区等于掉进沼泽）。
+窄分屏那条按老板先前的「不扩」**维持现状**。
+
+### 为什么键盘够不到（R33 已取证，本轮复核复用）
+
+| 位置 | 事实 |
+| --- | --- |
+| `vendor/creation-board.js:1938` | 卡片标题是 `<a class="internal-link cb-title">`，**无 href / 无 tabindex / 无 role** → 原生不可聚焦 |
+| 同处事件 | 只有 `click`（Ctrl/Cmd+单击 = 新标签）与 `dblclick`（= 打开笔记）—— **两条都是指针路径** |
+| `vendor/creation-board.js:2017` | 卡片菜单唯一入口 = `contextmenu` + 长按（触屏） |
+| `vendor/creation-board.js:3114` | 菜单项全是 `div`、只绑 `mousedown` + `click`，**无 role / 无 tabindex / 无方向键** |
+| 全仓 `tabindex` | **0**（vendor 0 / 三个 CSS 0 / 全部 src 0） |
+
+→ 结论：纯键盘用户在这一屏**一张笔记都打不开、一个菜单都调不出来**。这是**功能级**缺口，不是体验略差。
+
+### 怎么补（全部在**外层**，`vendor` 一个字节未改）
+
+`installBoardKeyboard(view)`（`src/85_modules_base.js`）：
+
+| # | 做法 | 说明 |
+| --- | --- | --- |
+| ① | `root` 挂 **`tabindex="-1"`** | 可聚焦但**不进 Tab 序** → **不增停靠点**（选 B 的核心承诺） |
+| ② | **一个** `document` keydown 委托（capture 阶段） | 卡片区 `↑↓←→ / Home / End` 移动高亮；`Enter` 打开笔记；**菜单键 / Shift+F10** 开该卡菜单 |
+| ③ | 菜单内 `↑↓ / Home / End` 移动、`Enter` 执行 | 执行走 `el.click()` —— **实测能触发 vendor 的 click 处理器**，不必另造一套执行逻辑（十项菜单行为与鼠标逐字同一份）；`Esc` 交回 vendor（它自己绑了） |
+| ④ | 高亮 = `.kb-key-nav` + `.kb-key-hot` | 类**只在键盘真的用过之后**才由 JS 加上 → 鼠标用户**零感知**；卡片走**与 `:hover` 同一条通道**（边框 + 阴影，用 `--interactive-accent`），菜单项走背景色（与 `:hover` 一致） |
+| ⑤ | 收口：**包该视图实例的 `onunload`** | 运行时改实例方法（不动 vendor 文件）→ 关视图时摘掉 `document` 监听，**不泄漏** |
+| ⑥ | 挂载：在 `patchViewRegistration` 里**包 `reg.factory`** | 每个视图实例各挂一份、随实例销毁；`__kbKeyFactory` / `__kbKeyNav` 两个标记让「接没接上」可断言 |
+
+**进入方向语义**（两个 bug 的根因）：无高亮时首按 —— `↓ / → / Home` 落在**第一张**，`↑ / ← / End` 落在**最后一张**；
+根因是 `base` 被写成 `onCard ? indexOf(cardOf(t)) : -1`（会让首按 ↓ 跳过第一张），改成 **`base = cur ? cardIdx : -1`，方向由键决定**。
+
+### 我自己踩的两个坑（都当场修了，已立铁律）
+
+| 坑 | 症状 | 根因 | 修法 |
+| --- | --- | --- | --- |
+| **假绿**（→ **铁律 75**） | 首版套件手调 `installBoardKeyboard(v)` → **58/0 全绿** | 手调绕过了 `BoardModule.onEnable` → `patchViewRegistration` 压根没跑，真机**一行都没挂上** | 改成从产品入口进（`BoardModule.onEnable` → 真 factory 建视图），立刻红 **3 条**（`__kbKeyFactory` / `__kbKeyNav` / root tabindex） |
+| **断言越界**（→ **铁律 76**） | `run_r32` 的 **B7 假红**（`got=6 want=5`） | B7 数的是**整个 `85_modules_base.js`** 的 `doc.removeEventListener`，而本轮在同文件加了键盘通道（它 `uninstall` 也摘监听）→ 5 变 6 | 用 `segOf()` 切到目标函数体再数（同文件 B6 本来就用对了写法） |
+
+### 验证（改前备份 `.workbuddy/backup/kb-toolkit-R34-2026-09-22/`，8 个文件 sha256 回读核对）
+
+| 项 | 结果 |
+| --- | --- |
+| 构建 | `BUILD-OK src=20 bytes=600225 styles=93585` |
+| `tests/run_r34.js`（新） | **58 / 0** |
+| 全量 `run_all.js 3` | **2674 / 轮 → 8022 / 0**（3 轮合计） |
+| 真引擎几何 / 像素 | 59 / 23（**不变** —— 本轮纯 JS + 少量 CSS，桌面排布原样） |
+| vendor 改动 | **0 字节**（断言 G2 直接扫 vendor 里有没有我们的类名） |
+
+---
+
 ## 未发布 — R33（与 Claude Code 交叉评审后的「界面 / 交互打磨轮」）
 
 **老板拍板（2026-09-22）**：① **不扩** —— R30 ⑤ 保持 `body.is-mobile` 单一口径，本项结案。

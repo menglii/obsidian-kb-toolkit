@@ -178,6 +178,29 @@
   }
 }
 
+/* ============================================================
+ * R34：键盘导航高亮（boss 选 B —— 只开「卡片菜单的键盘通道」）
+ *   ① .kb-key-nav 只在**键盘真的用过**之后才由 JS 加到 .cb-root 上 →
+ *      鼠标用户永远看不到这两个类，视觉零变化（可断言）。
+ *   ② 卡片高亮走**与 hover 同一条通道**（边框 + 阴影）→ 视觉语言一致，
+ *      不会让人以为卡片"被选中了"（不是选中态，是「键盘焦点在这」）。
+ *   ③ 用 --interactive-accent 而非裸色值：深浅主题自动跟随。
+ *   ④ 不用 !important（项目铁律）；层叠上跟在 hover 之后，二者同时成立时
+ *      高亮胜过 hover —— 键盘与鼠标都可用，不打架。
+ * ============================================================ */
+.cb-root.kb-key-nav .cb-card.kb-key-hot {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px var(--interactive-accent-hover, var(--interactive-accent));
+}
+/* 键盘高亮时标题也跟着亮一下，让「要打开哪篇」一眼可见 */
+.cb-root.kb-key-nav .cb-card.kb-key-hot .cb-title {
+  color: var(--interactive-accent);
+}
+/* 菜单项高亮：与 .cb-ctx-item:hover 同一条通道（背景色），触屏/桌面都不会错位 */
+.cb-ctxmenu .cb-ctx-item.kb-key-hot {
+  background-color: var(--background-modifier-hover);
+}
+
 .cb-title {
   display: block;
   font-size: var(--font-ui-small);

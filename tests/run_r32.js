@@ -100,7 +100,12 @@ ok(/\.cb-root, \.cb-panel, \.cb-ed-pop/.test(src85),
   "B5：只认看板自己的 DOM（.cb-root / 面板 / 编辑浮层），不接管整篇文档");
 eq(count(/doc\.addEventListener\(/g, fnTip), 5,
   "B6：5 条监听（touchstart / touchmove / touchend / touchcancel / scroll）");
-eq(count(/doc\.removeEventListener\(/g, stripComments(src85)), 5,
+/* 🔴 R34 修正：原来数的是**整个 src85 文件**的 doc.removeEventListener —— 只要同文件里
+ *    任何**别的**模块也摘 document 监听（R34 的看板键盘通道就是这么干的），这条就假红。
+ *    断言意图是「installTouchTips 把 5 条全摘」，故限定到**该函数体**（它内部只有
+ *    uninstall 一处会摘监听；B6 已验过同一段里有 5 条 add）。 */
+const fnTipBody = segOf(src85, "function installTouchTips(opts) {", "KB.modules.installTouchTips = installTouchTips;");
+eq(count(/doc\.removeEventListener\(/g, stripComments(fnTipBody)), 5,
   "B7：uninstall 里 5 条**全摘**（漏一条 = 模块关了还在弹）");
 ok(/TIP_HOLD_MS = 400/.test(src85) && /550ms/.test(src85),
   "B8：按住 400ms 出气泡 —— 故意 < vendor 长按的 550ms（先出说明，菜单后来者居上）");
