@@ -47,6 +47,12 @@ KB.define("entry", function () {
   function applySettingsChange(plugin, opts) {
     opts = opts || {};
     var reg = plugin && plugin.registry, changed = [];
+    /* R32 ⑤：中央表重算**收口到这里**。以前 87（向导保存）/ 75（改路径）两处各自手写
+     * `router.util.applySettings(S)`，任何**新的**配置改动调用点都极易漏（漏了 = 中心页
+     * 双链仍按老库根推导，得重载插件才对）。现在调用方只管改 settings，这里统一重算。
+     * 🔴 onload 那条（本文件下面）留着不动 —— 那是开机路径，没有「配置变更」可收口，
+     *    走这里会白白多一次 saveSettings。 */
+    if (P["router.util"] && plugin && plugin.settings) P["router.util"].applySettings(plugin.settings);
     return KB.services.settings.saveSettings(plugin).catch(function (e) {
       console.warn("[kb-toolkit] 配置落盘失败", e);
       return null;

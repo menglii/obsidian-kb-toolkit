@@ -26,7 +26,7 @@ const { execFileSync } = require("child_process");
 const path = require("path");
 const NODE = process.execPath;
 const FILES = ["run_r1", "run_r2", "run_r3", "run_r3b", "run_r4", "run_r4b", "run_r5",
-  "run_r6", "run_r7", "run_r8", "run_r9", "run_r10", "run_r11", "run_r12", "run_r13", "run_r14", "run_r15", "run_r16", "run_r17", "run_r18", "run_r19", "run_r20", "run_r20b", "run_r21", "run_r22", "run_r23", "run_r24", "run_r25", "run_r26", "run_r27", "run_r28", "run_r29", "run_r30"];
+  "run_r6", "run_r7", "run_r8", "run_r9", "run_r10", "run_r11", "run_r12", "run_r13", "run_r14", "run_r15", "run_r16", "run_r17", "run_r18", "run_r19", "run_r20", "run_r20b", "run_r21", "run_r22", "run_r23", "run_r24", "run_r25", "run_r26", "run_r27", "run_r28", "run_r29", "run_r30", "run_r32"];
 
 const rounds = parseInt(process.argv[2] || "3", 10);
 let grandTotal = 0, grandFail = 0;

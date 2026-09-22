@@ -2054,8 +2054,10 @@ input.cb-wrange:disabled {
 /* 触屏没有 hover：别让「悬停才出来」的提示白占位置
  * 🔴 R31：原来只复位了 .cb-card 一家，其余 21 条 hover 在触屏上会**粘住**
  *   （点过之后底色/光环不消失，看着像「还开着」）。按机制兜，不逐个点名。
- *   🟡 有意**不**复位 .cb-prop-val：那块灰底是「这里可以点/可以改」的唯一提示，
- *      复位了提示就没了 —— 粘住的代价小于提示丢失，这条留给老板拍板。 */
+ *   🟢 R32（老板拍板「剩下 5 项也全做」）：.cb-prop-val **也复位**，
+ *      但补一条**常驻**的虚线下划线顶上 —— 原来那块灰底是「这里能点/能改」的
+ *      唯一提示，光复位会把提示弄丢。下划线走 text-decoration，
+ *      不进盒模型（不撑高卡片），且只在**可编辑态**（只读开关没开）出现。 */
 @media (hover: none) {
   .cb-card:hover {
     border-color: var(--background-modifier-border);
@@ -2068,6 +2070,17 @@ input.cb-wrange:disabled {
   .cb-grip:hover {
     background-color: transparent;
     box-shadow: none;
+  }
+  .cb-prop-val:hover {
+    background-color: transparent;
+    box-shadow: none;
+  }
+  /* 复位之后「这里能改」就没了 → 常驻虚线下划线顶上（与正文 .cb-body 那条
+   * dashed 分隔线同一套视觉语言，不新增颜色、不新增布局高度）。
+   * 可读态（.cb-ro.is-on = 只读开启）不给 —— 那时候本来就改不动。 */
+  .cb-root:has(.cb-ro:not(.is-on)) .cb-prop-val:not(.is-empty) {
+    text-decoration: underline dashed var(--text-faint);
+    text-underline-offset: 2px;
   }
 }
 
@@ -2101,6 +2114,64 @@ body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-to
 }
 body.is-phone .workspace-leaf-content[data-type="bases"]:has(.cb-root) .bases-toolbar .bases-toolbar-result-count {
   display: none;
+}
+
+/* ============================================================
+ * R32（老板拍板：R31 遗留的 4 条 + 1 条框架重构）
+ *  ③ 触屏气泡 .cb-tip：看板里 42 处说明全写在 title 上，可触屏**没有 hover**，
+ *     vendor 的长按（550ms）还会 preventDefault 掐掉系统 tooltip → 手机上等于没有。
+ *     改成按住约 400ms 弹一个自绘气泡（JS 在 src/85_modules_base.js，
+ *     只在 (hover:none) 下才装；桌面一行都不装）。
+ *  ④ 极窄屏（≤360px）工具条：grid 的 max-content 列**永不收缩**，字号一被系统放大，
+ *     最右那颗就被静默裁掉（没有滚动条、没有省略号）。老板拍板「缩短按钮文案」，
+ *     不做横向滚动。
+ * ============================================================ */
+
+/* ③ 触屏气泡（ position:fixed 挂在 body 上，跟着手指走，不进看板的滚动容器）
+ * 🔴 z-index 30 < 浮层遮罩 40 < 长按菜单 --layer-modal(100) —— 菜单出来会盖住它 */
+.cb-tip {
+  position: fixed;
+  z-index: 30;
+  max-width: 78vw;
+  pointer-events: none;        /* 🔴 绝不能挡手指 */
+  padding: 4px 8px;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+  color: var(--text-normal);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow-s);
+}
+
+/* ④ 极窄屏：✎可编辑 / ↻重载 只留图标
+ * 🔴 文字是 vendor 直接塞进 <button> 的**文本节点**（vendor:763 / 783），
+ *    没有子元素可以 display:none → font-size:0 让文本节点不占宽，
+ *    再用 ::before 把图标字形补回来。
+ * 🔴 图标字形与 vendor 文案**同源**（"✎ 可编辑" / "↻ 重载" 的首字形）；
+ *    tests/run_r32.js 有断言盯着 vendor 原文，改文案会假红，不会静默失配。
+ * 🟡 只压这两颗（最宽，89 / 58px）：⚙板块 的「板块」二字留着 —— 它是看板设置的
+ *    唯一入口，且 vendor 没给它 title（触屏气泡也救不回来）。 */
+@media (max-width: 360px) {
+  .cb-ro,
+  .cb-refresh {
+    font-size: 0;
+    padding-left: 6px;
+    padding-right: 6px;
+    /* 🔴 真机实测：.cb-ro 所在的**第一列**与下一行的 .cb-mode **共用**（grid
+     *    template-areas 两行共用同一套列宽），列宽是 .cb-mode 那串字顶出来的
+     *    （320 档实测 89px / 1.5× 字号 126px）。不写这条，按钮会被拉成整列宽的
+     *    空盒子（里面只有一颗 12px 的 ✎）。start = 只占自己内容那点宽。 */
+    justify-self: start;
+  }
+  .cb-ro::before {
+    content: "✎";
+    font-size: var(--font-ui-smaller);
+  }
+  .cb-refresh::before {
+    content: "↻";
+    font-size: var(--font-ui-smaller);
+  }
 }
 
 /* kbt.css — kb-toolkit 设置页/面板增强样式（R13 界面翻新 / R16 三标签改版 / R18 排版 v3）。

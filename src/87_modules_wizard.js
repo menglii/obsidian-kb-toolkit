@@ -119,7 +119,7 @@ KB.define("modules/wizard", function () {
       if (this.draft.knowledgeBase) S.paths.knowledgeBase = this.draft.knowledgeBase;
       if (this.draft.metaDir) S.paths.metaDir = this.draft.metaDir;
       KB.services.settings.reapplyPaths(S, prev);
-      KB.services["router.util"].applySettings(S);
+      /* R32 ⑤：中央表重算已收进 applySettingsChange（下面那个 apply），这里不再手写 */
       S.modules.rebuild = this.draft.modules.rebuild;
       S.modules.automation = this.draft.modules.automation;
       S.modules.base = this.draft.modules.base;

@@ -613,7 +613,7 @@ KB.define("core/settingTab", function () {
       if (!v || v === S.paths[field]) { if (setting) tab.pathDesc(setting, field); return false; }
       S.paths[field] = v;
       KB.services.settings.reapplyPaths(S, prev);
-      KB.services["router.util"].applySettings(S);
+      /* R32 ⑤：中央表重算已收进 applySettingsChange（下面那个 apply），这里不再手写 */
       /* R8：这里**不重画整页**（重画会把正在输入的框换掉）。改完只就地更新这一行的说明文案；
        * 模块那边照样当场重配（reapply），所以行为立刻生效。 */
       var apply = KB.modules.applySettingsChange;

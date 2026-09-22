@@ -109,6 +109,95 @@ KB.define("modules/base", function () {
     return n;
   }
 
+  /* ============================================================
+   * R32 ③：触屏气泡提示（title 的替身）
+   *   看板里 42 处说明全写在 title 上，可触屏**没有 hover**，vendor 的长按（550ms）
+   *   还会 preventDefault 掐掉系统 tooltip → 那些说明在手机上等于不存在。
+   *   这里自己弹：按住约 400ms 出一个自绘气泡 .cb-tip；抬手 / 手指移动 >10px /
+   *   滚动 / 下一次触摸 立刻撤；最多活 1.2 秒（长按是一直按着不放的，不能只靠抬手收）。
+   *   🔴 四条边界：
+   *     ① 只认看板自己的 DOM（.cb-root / .cb-panel / .cb-ed-pop 之内），不接管整篇文档；
+   *     ② 气泡 pointer-events:none（写在样式里）—— 绝不挡手指；
+   *     ③ z-index 30 < 遮罩 40 < 菜单 100：vendor 长按菜单出来会盖住它，不打架；
+   *     ④ 桌面（有 hover）**压根不装**，零监听器、零开销。
+   * ============================================================ */
+  var TIP_SCOPE = ".cb-root, .cb-panel, .cb-ed-pop";
+  var TIP_HOLD_MS = 400;    /* < vendor 的 550ms 长按：先出气泡，菜单后来者居上 */
+  var TIP_LIFE_MS = 1200;   /* 自己会走，不靠抬手 */
+
+  function installTouchTips(opts) {
+    opts = opts || {};
+    var doc = opts.doc || (typeof document !== "undefined" ? document : null);
+    var win = opts.win || (doc && doc.defaultView) || (typeof window !== "undefined" ? window : null);
+    if (!doc || !win || typeof doc.addEventListener !== "function") return null;
+    if (opts.force !== true) {
+      var mq = (typeof win.matchMedia === "function") ? win.matchMedia("(hover: none)") : null;
+      if (!mq || !mq.matches) return null;      /* 桌面 / 有 hover：一条都不装 */
+    }
+    var tip = null, hold = null, life = null, sx = 0, sy = 0;
+
+    function hide() {
+      if (hold) { win.clearTimeout(hold); hold = null; }
+      if (life) { win.clearTimeout(life); life = null; }
+      if (tip && tip.parentNode) tip.parentNode.removeChild(tip);
+      tip = null;
+    }
+    function show(text, x, y) {
+      hide();
+      tip = doc.createElement("div");
+      tip.className = "cb-tip";
+      tip.setAttribute("role", "tooltip");
+      tip.textContent = text;
+      doc.body.appendChild(tip);
+      /* 自校准：贴手指上方，左右夹回视口内 —— 不写死坐标（铁律 69） */
+      var vw = win.innerWidth || (doc.documentElement && doc.documentElement.clientWidth) || 320;
+      var w = tip.offsetWidth || Math.min(220, Math.round(vw * 0.78));
+      var h = tip.offsetHeight || 26;
+      tip.style.left = Math.min(Math.max(4, x - w / 2), Math.max(4, vw - w - 4)) + "px";
+      tip.style.top = Math.max(4, y - h - 14) + "px";
+      life = win.setTimeout(hide, TIP_LIFE_MS);
+    }
+    function onStart(e) {
+      var t = e && e.touches && e.touches[0];
+      if (!t) return;
+      hide();
+      var el = e.target;
+      if (!el || typeof el.closest !== "function") return;
+      var host = el.closest(TIP_SCOPE);
+      if (!host) return;
+      var src = el.closest("[title]");
+      if (!src || !host.contains(src)) return;
+      var text = src.getAttribute("title");
+      if (!text) return;
+      sx = t.clientX; sy = t.clientY;
+      hold = win.setTimeout(function () { hold = null; show(text, sx, sy); },
+                            opts.holdMs == null ? TIP_HOLD_MS : opts.holdMs);
+    }
+    function onMove(e) {
+      if (!hold) return;
+      var t = e && e.touches && e.touches[0];
+      if (t && (Math.abs(t.clientX - sx) > 10 || Math.abs(t.clientY - sy) > 10)) hide();
+    }
+    doc.addEventListener("touchstart", onStart, true);
+    doc.addEventListener("touchmove", onMove, true);
+    doc.addEventListener("touchend", hide, true);
+    doc.addEventListener("touchcancel", hide, true);
+    doc.addEventListener("scroll", hide, true);
+    return {
+      hide: hide,
+      el: function () { return tip; },
+      uninstall: function () {
+        hide();
+        doc.removeEventListener("touchstart", onStart, true);
+        doc.removeEventListener("touchmove", onMove, true);
+        doc.removeEventListener("touchend", hide, true);
+        doc.removeEventListener("touchcancel", hide, true);
+        doc.removeEventListener("scroll", hide, true);
+      }
+    };
+  }
+  KB.modules.installTouchTips = installTouchTips;
+
   /** 创作看板：VIEW_TYPE = creation-board（原样） */
   function BoardModule(plugin) { this.plugin = plugin; }
   /**
@@ -171,8 +260,11 @@ KB.define("modules/base", function () {
     patchViewRegistration(this.inst, this.plugin);
     await loadInstance(this.inst);
     await this.applyBoardExclude();
+    /* R32 ③：触屏才装（内部自己判 (hover:none)），桌面返回 null —— 什么都不做 */
+    this.touchTip = installTouchTips();
   };
   BoardModule.prototype.onDisable = async function () {
+    if (this.touchTip) { this.touchTip.uninstall(); this.touchTip = null; }
     var inst = this.inst;
     this.inst = null;
     await unloadInstance(inst);

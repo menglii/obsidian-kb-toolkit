@@ -220,12 +220,32 @@ console.log("\n== R29 · 手机端适配 ==");
 
 /* 🔴 R30 修（铁律 49：断言跟着意图走）：D1 原来数「700px 只出现一次」—— 那是 R29 当时的
  *   副产品，真正的意图是「窄屏断点值全项目只有一种、且与设置页 kbt.css 同值」。
- *   R30 追加第二个 700px 块（可编辑靠左）立刻被字面计数误伤。改成按值断言。 */
+ *   R30 追加第二个 700px 块（可编辑靠左）立刻被字面计数误伤。改成按值断言。
+ * 🔴 R32 再修（还是铁律 49）：本轮**有意**加第二档 360px（④ 极窄机型把工具条按钮
+ *   缩成图标）。它不是「第二套手机端口径」，是一档**更窄的补充档**。
+ *   把意图钉成三条：① 主档 700 与 kbt.css 同值 ② 360 档只此一块
+ *   ③ 360 块不许长成第二套手机端口径（不带 is-mobile / is-phone / 设置页类名）。 */
 const cbBps = [...cssRaw.matchAll(/@media \(max-width: (\d+)px\)/g)].map((m) => m[1]);
-eq(new Set(cbBps).size, 1,
-  "D1a：cb.css 的窄屏断点值只有一种（不许出现两套窄屏口径）");
-eq(cbBps[0] || "", "700",
-  "D1b：断点 = 700px（与设置页 kbt.css 的 @media (max-width: 700px) 同值）");
+eq(new Set(cbBps).size, 2,
+  "D1a：cb.css 的窄屏断点值恰 2 档（700 主档 + 360 极窄档，R32 ④）");
+eq(cbBps.indexOf("700") >= 0, true,
+  "D1b：主档 = 700px（与设置页 kbt.css 的 @media (max-width: 700px) 同值）");
+eq(cbBps.filter((v) => v === "360").length, 1,
+  "D1c：极窄档 360px 只此一块（第二块就会跟自己打架 —— R30 吃过这个亏）");
+const n360 = (function () {                        /* 取 360 块（{...} 配平） */
+  const i = cssRaw.indexOf("@media (max-width: 360px) {");
+  if (i < 0) return "";
+  const j = cssRaw.indexOf("{", i);
+  let d = 0, k = j;
+  for (; k < cssRaw.length; k++) {
+    if (cssRaw[k] === "{") d++;
+    else if (cssRaw[k] === "}") { d--; if (d === 0) { k++; break; } }
+  }
+  return cssRaw.slice(i, k);
+})();
+ok(n360.length > 0 && !/\.is-mobile|\.is-phone|\.kbt-/.test(n360),
+  "D1d：🔴 360 块不许长成第二套「手机端」口径 —— 只压工具条那两颗按钮，"
+  + "不带 is-mobile / is-phone / 设置页类名（真要加手机端规则请回 700 档）");
 eq(count(/@media \(hover: none\)/g, cssRaw), 1, "D2：触屏（无 hover）断点只此一处");
 ok(/\.cb-bar \{[\s\S]{0,400}?display: grid;/.test(mobileCss) &&
    /grid-template-areas:[\s\S]{0,120}?"ro mid gear refresh"\s*\n\s*"mode count count count"/.test(mobileCss),
